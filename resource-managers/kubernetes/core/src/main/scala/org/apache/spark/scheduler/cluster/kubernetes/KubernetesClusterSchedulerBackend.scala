@@ -21,18 +21,18 @@ import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, ContainerPortBuilder, EnvVarBuilder, EnvVarSourceBuilder, Pod, PodBuilder, QuantityBuilder}
-import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException, Watcher}
-import io.fabric8.kubernetes.client.Watcher.Action
-import org.apache.commons.io.FilenameUtils
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import io.fabric8.kubernetes.api.model._
+import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException, Watcher}
+import io.fabric8.kubernetes.client.Watcher.Action
+import org.apache.commons.io.FilenameUtils
+
 import org.apache.spark.{SparkContext, SparkEnv, SparkException}
-import org.apache.spark.deploy.kubernetes.{ConfigurationUtils, InitContainerResourceStagingServerSecretPlugin, PodWithDetachedInitContainer, SparkPodInitContainerBootstrap}
+import org.apache.spark.deploy.kubernetes._
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.deploy.kubernetes.submit.InitContainerUtil
@@ -48,6 +48,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     val sc: SparkContext,
     executorInitContainerBootstrap: Option[SparkPodInitContainerBootstrap],
+    executorHadoopBootStrap: Option[HadoopConfBootstrap],
     executorMountInitContainerSecretPlugin: Option[InitContainerResourceStagingServerSecretPlugin],
     kubernetesClient: KubernetesClient)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
@@ -366,6 +367,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
    * @return A tuple of the new executor name and the Pod data structure.
    */
   private def allocateNewExecutorPod(nodeToLocalTaskCount: Map[String, Int]): (String, Pod) = {
+    import scala.collection.JavaConverters._
     val executorId = EXECUTOR_ID_COUNTER.incrementAndGet().toString
     val name = s"$executorPodNamePrefix-exec-$executorId"
 
@@ -520,9 +522,16 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
     val executorPodWithNodeAffinity = addNodeAffinityAnnotationIfUseful(
         executorPodWithInitContainer, nodeToLocalTaskCount)
-    val resolvedExecutorPod = new PodBuilder(executorPodWithNodeAffinity)
+    val (executorHadoopConfPod, executorHadoopConfContainer) =
+      executorHadoopBootStrap.map { bootstrap =>
+        val podWithMainContainer = bootstrap.bootstrapMainContainerAndVolumes(
+          PodWithMainContainer(executorPodWithNodeAffinity, initBootstrappedExecutorContainer)
+        )
+        (podWithMainContainer.pod, podWithMainContainer.mainContainer)
+      }.getOrElse(executorPodWithNodeAffinity, initBootstrappedExecutorContainer)
+    val resolvedExecutorPod = new PodBuilder(executorHadoopConfPod)
       .editSpec()
-        .addToContainers(initBootstrappedExecutorContainer)
+        .addToContainers(executorHadoopConfContainer)
         .endSpec()
       .build()
     try {
