@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
 
 import scala.collection.mutable
+import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -49,6 +50,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     val sc: SparkContext,
     executorInitContainerBootstrap: Option[SparkPodInitContainerBootstrap],
     executorHadoopBootStrap: Option[HadoopConfBootstrap],
+    executorKerberosBootStrap: Option[KerberosConfBootstrap],
     executorMountInitContainerSecretPlugin: Option[InitContainerResourceStagingServerSecretPlugin],
     kubernetesClient: KubernetesClient)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
@@ -367,7 +369,6 @@ private[spark] class KubernetesClusterSchedulerBackend(
    * @return A tuple of the new executor name and the Pod data structure.
    */
   private def allocateNewExecutorPod(nodeToLocalTaskCount: Map[String, Int]): (String, Pod) = {
-    import scala.collection.JavaConverters._
     val executorId = EXECUTOR_ID_COUNTER.incrementAndGet().toString
     val name = s"$executorPodNamePrefix-exec-$executorId"
 
@@ -529,9 +530,16 @@ private[spark] class KubernetesClusterSchedulerBackend(
         )
         (podWithMainContainer.pod, podWithMainContainer.mainContainer)
       }.getOrElse(executorPodWithNodeAffinity, initBootstrappedExecutorContainer)
-    val resolvedExecutorPod = new PodBuilder(executorHadoopConfPod)
+    val (executorKerberosPod, executorKerberosContainer) =
+      executorKerberosBootStrap.map { bootstrap =>
+        val podWithMainContainer = bootstrap.bootstrapMainContainerAndVolumes(
+          PodWithMainContainer(executorHadoopConfPod, executorHadoopConfContainer)
+        )
+        (podWithMainContainer.pod, podWithMainContainer.mainContainer)
+      }.getOrElse((executorHadoopConfPod, executorHadoopConfContainer))
+    val resolvedExecutorPod = new PodBuilder(executorKerberosPod)
       .editSpec()
-        .addToContainers(executorHadoopConfContainer)
+        .addToContainers(executorKerberosContainer)
         .endSpec()
       .build()
     try {
