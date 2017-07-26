@@ -41,6 +41,7 @@ private[spark] class HadoopKerberosKeytabResolverStep(
   override def configureContainers(hadoopConfigSpec: HadoopConfigSpec): HadoopConfigSpec = {
     // FIXME: Pass down hadoopConf so you can call sc.hadoopConfiguration
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(submissionSparkConf)
+    logInfo(s"Hadoop Configuration: ${hadoopConf.toString}")
     if (!UserGroupInformation.isSecurityEnabled) logError("Hadoop not configuration with Kerberos")
     val maybeJobUserUGI =
       for {
@@ -58,6 +59,7 @@ private[spark] class HadoopKerberosKeytabResolverStep(
       }
     // In the case that keytab is not specified we will read from Local Ticket Cache
     val jobUserUGI = maybeJobUserUGI.getOrElse(UserGroupInformation.getCurrentUser)
+    logInfo("Primary group name: jobUserUGI.getPrimaryGroupName")
     val credentials: Credentials = jobUserUGI.getCredentials
     val credentialsManager = newHadoopTokenManager(submissionSparkConf, hadoopConf)
     var renewalTime = Long.MaxValue

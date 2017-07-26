@@ -17,18 +17,10 @@
 <!-- Put site-specific property overrides in this file. -->
 
 <configuration>
+  <!-- must be set for HDFS libraries to obtain delegation tokens -->
+  <!-- (hardcoded to use this ID as the renewer) -->
   <property>
-    <name>hadoop.security.authentication</name>
-    <value>kerberos</value>
-  </property>
-
-  <property>
-    <name>hadoop.security.authorization</name>
-    <value>true</value>
-  </property>
-
-  <property>
-    <name>fs.defaultFS</name>
-    <value>hdfs://nn.kerberostest.svc.cluster.local:9000</value>
+    <name>yarn.resourcemanager.principal</name>
+    <value>yarn/_HOST@CLUSTER.LOCAL</value>
   </property>
 </configuration>

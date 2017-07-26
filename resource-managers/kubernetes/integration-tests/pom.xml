@@ -92,6 +92,7 @@
     <dependency>
       <groupId>com.spotify</groupId>
       <artifactId>docker-client</artifactId>
+      <version>8.8.2</version>
       <scope>test</scope>
       <!--
         See https://github.com/spotify/docker-client/pull/272#issuecomment-155249101
