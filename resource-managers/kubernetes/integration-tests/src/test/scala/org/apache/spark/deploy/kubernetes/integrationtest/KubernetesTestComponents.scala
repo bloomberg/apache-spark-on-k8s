@@ -16,18 +16,17 @@
  */
 package org.apache.spark.deploy.kubernetes.integrationtest
 
-import java.util.UUID
-
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
-import org.scalatest.concurrent.Eventually
-import scala.collection.JavaConverters._
-
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.kubernetes.config._
+import org.scalatest.concurrent.Eventually
+
+import scala.collection.JavaConverters._
 
 private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesClient) {
 
-  val namespace = UUID.randomUUID().toString.replaceAll("-", "")
+  // val namespace = UUID.randomUUID().toString.replaceAll("-", "")
+  val namespace = "kerberostest"
   val kubernetesClient = defaultClient.inNamespace(namespace)
   val clientConfig = kubernetesClient.getConfiguration
 
@@ -48,6 +47,18 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
         .getItems()
         .asScala
       require(!namespaceList.exists(_.getMetadata.getName == namespace))
+    }
+  }
+
+  def deletePersistentVolumes(): Unit = {
+    kubernetesClient.persistentVolumes().delete()
+    Eventually.eventually(KubernetesSuite.TIMEOUT, KubernetesSuite.INTERVAL) {
+      val persistentList = kubernetesClient
+        .persistentVolumes()
+        .list()
+        .getItems()
+        .asScala
+      require(!persistentList.exists(_.getMetadata.getNamespace == namespace))
     }
   }
 

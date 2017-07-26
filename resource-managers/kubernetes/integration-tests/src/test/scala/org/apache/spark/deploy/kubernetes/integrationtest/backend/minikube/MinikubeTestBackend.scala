@@ -17,17 +17,15 @@
 package org.apache.spark.deploy.kubernetes.integrationtest.backend.minikube
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
-
 import org.apache.spark.deploy.kubernetes.integrationtest.backend.IntegrationTestBackend
 import org.apache.spark.deploy.kubernetes.integrationtest.constants.MINIKUBE_TEST_BACKEND
-import org.apache.spark.deploy.kubernetes.integrationtest.docker.SparkDockerImageBuilder
 
 private[spark] class MinikubeTestBackend extends IntegrationTestBackend {
   private var defaultClient: DefaultKubernetesClient = _
 
   override def initialize(): Unit = {
     Minikube.startMinikube()
-    new SparkDockerImageBuilder(Minikube.getDockerEnv).buildSparkDockerImages()
+    // new SparkDockerImageBuilder(Minikube.getDockerEnv).buildSparkDockerImages()
     defaultClient = Minikube.getKubernetesClient
   }
 
