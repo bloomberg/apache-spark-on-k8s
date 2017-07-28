@@ -59,7 +59,7 @@ private[spark] class HadoopKerberosKeytabResolverStep(
       }
     // In the case that keytab is not specified we will read from Local Ticket Cache
     val jobUserUGI = maybeJobUserUGI.getOrElse(UserGroupInformation.getCurrentUser)
-    logInfo("Primary group name: jobUserUGI.getPrimaryGroupName")
+    logInfo(s"Primary group name: ${jobUserUGI.getPrimaryGroupName}")
     val credentials: Credentials = jobUserUGI.getCredentials
     val credentialsManager = newHadoopTokenManager(submissionSparkConf, hadoopConf)
     var renewalTime = Long.MaxValue

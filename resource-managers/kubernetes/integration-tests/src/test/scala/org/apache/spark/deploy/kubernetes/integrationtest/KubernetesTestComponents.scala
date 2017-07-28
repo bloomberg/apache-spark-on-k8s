@@ -16,17 +16,19 @@
  */
 package org.apache.spark.deploy.kubernetes.integrationtest
 
+import java.util.UUID
+
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
+import scala.collection.JavaConverters._
+
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.kubernetes.config._
-import org.scalatest.concurrent.Eventually
 
-import scala.collection.JavaConverters._
+import org.scalatest.concurrent.Eventually
 
 private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesClient) {
 
-  // val namespace = UUID.randomUUID().toString.replaceAll("-", "")
-  val namespace = "kerberostest"
+  val namespace = UUID.randomUUID().toString.replaceAll("-", "")
   val kubernetesClient = defaultClient.inNamespace(namespace)
   val clientConfig = kubernetesClient.getConfiguration
 
@@ -50,7 +52,7 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
     }
   }
 
-  def deletePersistentVolumes(): Unit = {
+  def deleteKubernetesResources(): Unit = {
     kubernetesClient.persistentVolumes().delete()
     Eventually.eventually(KubernetesSuite.TIMEOUT, KubernetesSuite.INTERVAL) {
       val persistentList = kubernetesClient
@@ -59,6 +61,15 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
         .getItems()
         .asScala
       require(!persistentList.exists(_.getMetadata.getNamespace == namespace))
+    }
+    kubernetesClient.configMaps().delete()
+    Eventually.eventually(KubernetesSuite.TIMEOUT, KubernetesSuite.INTERVAL) {
+      val configMapsList = kubernetesClient
+        .configMaps()
+        .list()
+        .getItems()
+        .asScala
+      require(!configMapsList.exists(_.getMetadata.getNamespace == namespace))
     }
   }
 

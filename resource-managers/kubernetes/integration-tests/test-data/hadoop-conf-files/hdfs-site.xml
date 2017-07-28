@@ -40,11 +40,11 @@
   </property>
   <property>
     <name>dfs.namenode.kerberos.principal</name>
-    <value>hdfs/nn.kerberostest.svc.cluster.local@CLUSTER.LOCAL</value>
+    <value>hdfs/nn.${NAMESPACE}.svc.cluster.local@CLUSTER.LOCAL</value>
   </property>
   <property>
     <name>dfs.namenode.kerberos.internal.spnego.principal</name>
-    <value>HTTP/nn.kerberostest.svc.cluster.local@CLUSTER.LOCAL</value>
+    <value>HTTP/nn.${NAMESPACE}.svc.cluster.local@CLUSTER.LOCAL</value>
   </property>
 
 
@@ -88,11 +88,11 @@
   </property>
   <property>
     <name>dfs.namenode.kerberos.principal</name>
-    <value>hdfs/nn.kerberostest.svc.cluster.local@CLUSTER.LOCAL</value>
+    <value>hdfs/nn.${NAMESPACE}.svc.cluster.local@CLUSTER.LOCAL</value>
   </property>
   <property>
     <name>dfs.namenode.kerberos.internal.spnego.principal</name>
-    <value>HTTP/nn.kerberostest.svc.cluster.local@CLUSTER.LOCAL</value>
+    <value>HTTP/nn.${NAMESPACE}.svc.cluster.local@CLUSTER.LOCAL</value>
   </property>
 
   <!-- prevent those errors -->
@@ -108,11 +108,11 @@
   </property>
   <property>
     <name>dfs.datanode.keytab.file</name>
-    <value>/var/keytabs/hdfs.keytab</value> <!-- path to the HDFS keytab -->
+    <value>/var/keytabs/hdfs.keytab</value> <!--   path to the HDFS keytab -->
   </property>
   <property>
     <name>dfs.datanode.kerberos.principal</name>
-    <value>hdfs/dn1.kerberostest.svc.cluster.local@CLUSTER.LOCAL</value>
+    <value>hdfs/dn1.${NAMESPACE}.svc.cluster.local@CLUSTER.LOCAL</value>
   </property>
 
   <!-- Web Authentication config -->
@@ -122,7 +122,7 @@
   </property>
   <property>
     <name>dfs.web.authentication.kerberos.principal</name>
-    <value>HTTP/dn1.kerberostest.svc.cluster.local@CLUSTER.LOCAL</value>
+    <value>HTTP/dn1.${NAMESPACE}.svc.cluster.local@CLUSTER.LOCAL</value>
   </property>
   <property>
     <name>dfs.web.authentication.kerberos.keytab</name>

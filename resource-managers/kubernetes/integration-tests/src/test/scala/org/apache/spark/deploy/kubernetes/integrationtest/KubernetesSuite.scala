@@ -20,12 +20,16 @@ import java.nio.file.Paths
 import java.util.UUID
 
 import io.fabric8.kubernetes.client.internal.readiness.Readiness
+
+import org.apache.spark.{SparkConf, SSLOptions, SparkFunSuite}
+
 import org.apache.spark.deploy.kubernetes.config._
+
 import org.apache.spark.deploy.kubernetes.integrationtest.backend.IntegrationTestBackendFactory
 import org.apache.spark.deploy.kubernetes.integrationtest.backend.minikube.Minikube
 import org.apache.spark.deploy.kubernetes.integrationtest.constants.MINIKUBE_TEST_BACKEND
 import org.apache.spark.deploy.kubernetes.submit._
-import org.apache.spark.{SSLOptions, SparkConf, SparkFunSuite}
+
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Minutes, Seconds, Span}
@@ -41,6 +45,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
   private var resourceStagingServerLauncher: ResourceStagingServerLauncher = _
   private var staticAssetServerLauncher: StaticAssetServerLauncher = _
   private var kerberizedHadoopClusterLauncher: KerberizedHadoopClusterLauncher = _
+  private var kerberosTestLauncher: KerberosTestPodLauncher = _
 
   override def beforeAll(): Unit = {
     testBackend.initialize()
@@ -50,6 +55,9 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
     staticAssetServerLauncher = new StaticAssetServerLauncher(
       kubernetesTestComponents.kubernetesClient.inNamespace(kubernetesTestComponents.namespace))
     kerberizedHadoopClusterLauncher = new KerberizedHadoopClusterLauncher(
+      kubernetesTestComponents.kubernetesClient.inNamespace(kubernetesTestComponents.namespace),
+      kubernetesTestComponents.namespace)
+    kerberosTestLauncher = new KerberosTestPodLauncher(
       kubernetesTestComponents.kubernetesClient.inNamespace(kubernetesTestComponents.namespace),
       kubernetesTestComponents.namespace)
   }
@@ -67,7 +75,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   after {
-    kubernetesTestComponents.deletePersistentVolumes()
+    kubernetesTestComponents.deleteKubernetesResources()
     // kubernetesTestComponents.deleteNamespace()
   }
 
@@ -87,19 +95,24 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
   test("Secure HDFS test with HDFS keytab") {
     assume(testBackend.name == MINIKUBE_TEST_BACKEND)
     launchKerberizedCluster()
-    sparkConf.setJars(Seq(CONTAINER_LOCAL_HELPER_JAR_PATH))
-    sparkConf.set(KUBERNETES_KERBEROS_SUPPORT, true)
-    sparkConf.set(KUBERNETES_KERBEROS_KEYTAB, "/tmp/keytabs/hdfs.keytab")
-    sparkConf.set(KUBERNETES_KERBEROS_PRINCIPAL,
-      s"hdfs/nn.${kubernetesTestComponents.namespace}.svc.cluster.local@CLUSTER.LOCAL")
-    System.setProperty("java.security.krb5.conf", "src/test/resources/krb5.conf")
-    runSparkApplicationAndVerifyCompletion(
-      JavaMainAppResource(CONTAINER_LOCAL_MAIN_APP_RESOURCE),
-      SPARK_PI_MAIN_CLASS,
-      Seq("HADOOP_CONF_DIR defined. Mounting HDFS specific .xml files", "Pi is roughly 3"),
-      Array("5"),
-      Seq.empty[String],
-      Some("test-data/hadoop-conf-files"))
+    createKerberosTestPod(CONTAINER_LOCAL_MAIN_APP_RESOURCE, HDFS_TEST_CLASS, APP_LOCATOR_LABEL)
+    val expectedLogOnCompletion = Seq("Something something something")
+    Thread.sleep(50000)
+//    val driverPod = kubernetesTestComponents.kubernetesClient
+//      .pods()
+//      .withLabel("spark-app-locator", APP_LOCATOR_LABEL)
+//      .list()
+//      .getItems
+//      .get(0)
+//    Eventually.eventually(TIMEOUT, INTERVAL) {
+//      expectedLogOnCompletion.foreach { e =>
+//        assert(kubernetesTestComponents.kubernetesClient
+//          .pods()
+//          .withName(driverPod.getMetadata.getName)
+//          .getLog
+//          .contains(e), "The application did not complete.")
+//      }
+//    }
   }
 
 //  test("Run PySpark Job on file from SUBMITTER with --py-files") {
@@ -283,7 +296,11 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
   private def launchKerberizedCluster(): Unit = {
     assume(testBackend.name == MINIKUBE_TEST_BACKEND)
     kerberizedHadoopClusterLauncher.launchKerberizedCluster()
-    Thread.sleep(60000)
+  }
+
+  private def createKerberosTestPod(resource: String, className: String, appLabel: String): Unit = {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+    kerberosTestLauncher.startKerberosTest(resource, className, appLabel)
   }
 
   private def runSparkPiAndVerifyCompletion(appResource: String): Unit = {
@@ -396,8 +413,8 @@ private[spark] object KubernetesSuite {
     s"integration-tests-jars/${EXAMPLES_JAR_FILE.getName}"
   val CONTAINER_LOCAL_HELPER_JAR_PATH = s"local:///opt/spark/examples/" +
     s"integration-tests-jars/${HELPER_JAR_FILE.getName}"
-  val TIMEOUT = PatienceConfiguration.Timeout(Span(5, Minutes))
-  val INTERVAL = PatienceConfiguration.Interval(Span(5, Seconds))
+  val TIMEOUT = PatienceConfiguration.Timeout(Span(20, Minutes))
+  val INTERVAL = PatienceConfiguration.Interval(Span(20, Seconds))
   val SPARK_PI_MAIN_CLASS = "org.apache.spark.deploy.kubernetes" +
     ".integrationtest.jobs.SparkPiWithInfiniteWait"
   val PYSPARK_PI_MAIN_CLASS = "org.apache.spark.deploy.PythonRunner"
@@ -410,6 +427,8 @@ private[spark] object KubernetesSuite {
     ".integrationtest.jobs.FileExistenceTest"
   val GROUP_BY_MAIN_CLASS = "org.apache.spark.deploy.kubernetes" +
     ".integrationtest.jobs.GroupByTest"
+  val HDFS_TEST_CLASS = "org.apache.spark.deploy.kubernetes" +
+    ".integrationtest.jobs.HDFSTest"
   val TEST_EXISTENCE_FILE_CONTENTS = "contents"
 
 

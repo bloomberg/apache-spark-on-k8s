@@ -4,6 +4,7 @@ metadata:
   name: nn-hadoop
   labels:
     type: local
+    job: kerberostest
 spec:
   capacity:
     storage: 10Gi

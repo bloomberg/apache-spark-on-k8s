@@ -18,6 +18,7 @@ spec:
         name: data-populator
         image: ifilonenko/hadoop-base:latest
         imagePullPolicy: IfNotPresent
+        runAsNonRoot: false
         volumeMounts:
         - mountPath: /var/keytabs
           name: data-populator-keytab
