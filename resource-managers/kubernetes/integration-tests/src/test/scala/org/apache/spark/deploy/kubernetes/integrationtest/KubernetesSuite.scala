@@ -97,7 +97,6 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
     launchKerberizedCluster()
     createKerberosTestPod(CONTAINER_LOCAL_MAIN_APP_RESOURCE, HDFS_TEST_CLASS, APP_LOCATOR_LABEL)
     val expectedLogOnCompletion = Seq("Something something something")
-    Thread.sleep(50000)
 //    val driverPod = kubernetesTestComponents.kubernetesClient
 //      .pods()
 //      .withLabel("spark-app-locator", APP_LOCATOR_LABEL)

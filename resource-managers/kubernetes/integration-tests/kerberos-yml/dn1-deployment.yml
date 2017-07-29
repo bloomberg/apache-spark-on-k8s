@@ -11,6 +11,7 @@ spec:
       labels:
         name: hdfs-dn1
         kerberosService: dn1
+        job: kerberos-test
     spec:
       containers:
       - command:

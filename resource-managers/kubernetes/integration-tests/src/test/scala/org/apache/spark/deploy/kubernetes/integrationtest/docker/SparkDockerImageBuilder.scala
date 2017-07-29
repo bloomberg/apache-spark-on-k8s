@@ -88,15 +88,15 @@ private[spark] class SparkDockerImageBuilder
     if (exitCode != 0) {
       logInfo(s"exitCode: $exitCode")
     }
-//    buildImage("spark-base", BASE_DOCKER_FILE)
-//    buildImage("spark-driver", DRIVER_DOCKER_FILE)
-//    buildImage("spark-driver-py", DRIVERPY_DOCKER_FILE)
-//    buildImage("spark-executor", EXECUTOR_DOCKER_FILE)
-//    buildImage("spark-executor-py", EXECUTORPY_DOCKER_FILE)
-//    buildImage("spark-shuffle", SHUFFLE_SERVICE_DOCKER_FILE)
-//    buildImage("spark-resource-staging-server", STAGING_SERVER_DOCKER_FILE)
-//    buildImage("spark-init", INIT_CONTAINER_DOCKER_FILE)
-//    buildImage("spark-integration-test-asset-server", STATIC_ASSET_SERVER_DOCKER_FILE)
+    buildImage("spark-base", BASE_DOCKER_FILE)
+    buildImage("spark-driver", DRIVER_DOCKER_FILE)
+    buildImage("spark-driver-py", DRIVERPY_DOCKER_FILE)
+    buildImage("spark-executor", EXECUTOR_DOCKER_FILE)
+    buildImage("spark-executor-py", EXECUTORPY_DOCKER_FILE)
+    buildImage("spark-shuffle", SHUFFLE_SERVICE_DOCKER_FILE)
+    buildImage("spark-resource-staging-server", STAGING_SERVER_DOCKER_FILE)
+    buildImage("spark-init", INIT_CONTAINER_DOCKER_FILE)
+    buildImage("spark-integration-test-asset-server", STATIC_ASSET_SERVER_DOCKER_FILE)
     buildImage("kerberos-test", KERBEROS_DOCKER_FILE)
   }
 

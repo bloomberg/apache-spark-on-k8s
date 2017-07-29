@@ -17,18 +17,25 @@
 package org.apache.spark.deploy.kubernetes.submit.submitsteps.hadoopsteps
 
 import java.io._
-import java.security.PrivilegedExceptionAction
+
+import scala.collection.JavaConverters._
+import scala.util.Try
 
 import io.fabric8.kubernetes.api.model.SecretBuilder
 import org.apache.commons.codec.binary.Base64
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.token.{Token, TokenIdentifier}
+import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.kubernetes.{KerberosConfBootstrapImpl, PodWithMainContainer}
 import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.internal.Logging
+
+
 
  /**
   * Step that configures the ConfigMap + Volumes for the driver
@@ -59,20 +66,26 @@ private[spark] class HadoopKerberosKeytabResolverStep(
       }
     // In the case that keytab is not specified we will read from Local Ticket Cache
     val jobUserUGI = maybeJobUserUGI.getOrElse(UserGroupInformation.getCurrentUser)
-    logInfo(s"Primary group name: ${jobUserUGI.getPrimaryGroupName}")
-    val credentials: Credentials = jobUserUGI.getCredentials
-    val credentialsManager = newHadoopTokenManager(submissionSparkConf, hadoopConf)
-    var renewalTime = Long.MaxValue
-    jobUserUGI.doAs(new PrivilegedExceptionAction[Void] {
-      override def run(): Void = {
-        renewalTime = Math.min(
-          obtainCredentials(credentialsManager, hadoopConf, credentials),
-          renewalTime)
-        null
-      }
-    })
-    if (credentials.getAllTokens.isEmpty) logError("Did not obtain any Delegation Tokens")
-    val data = serialize(credentials)
+    logInfo(s"Retrieved Job User UGI: $jobUserUGI")
+    val originalCredentials: Credentials = jobUserUGI.getCredentials
+    logInfo(s"Original tokens: ${originalCredentials.toString}")
+    logInfo(s"All tokens: ${originalCredentials.getAllTokens}")
+    logInfo(s"All secret keys: ${originalCredentials.getAllSecretKeys}")
+    val dfs: FileSystem = FileSystem.get(hadoopConf)
+    // This is not necessary with [Spark-20328] since we would be using
+    // Spark core providers to handle delegation token renewal
+    val renewer: String = jobUserUGI.getShortUserName
+    logInfo(s"Renewer is: $renewer")
+    val renewedCredentials: Credentials = new Credentials(originalCredentials)
+    dfs.addDelegationTokens(renewer, renewedCredentials)
+    val renewedTokens = renewedCredentials.getAllTokens.asScala
+    logInfo(s"Renewed tokens: ${renewedCredentials.toString}")
+    logInfo(s"All renewed tokens: ${renewedTokens}")
+    logInfo(s"All renewed secret keys: ${renewedCredentials.getAllSecretKeys}")
+    if (renewedTokens.isEmpty) logError("Did not obtain any Delegation Tokens")
+    val data = serialize(renewedCredentials)
+    val renewalTime = getTokenRenewalInterval(renewedTokens, hadoopConf)
+      .getOrElse(Long.MaxValue)
     val delegationToken = HDFSDelegationToken(data, renewalTime)
     val initialTokenLabelName = s"$KERBEROS_SECRET_LABEL_PREFIX-1-$renewalTime"
     logInfo(s"Storing dt in $initialTokenLabelName")
@@ -97,24 +110,24 @@ private[spark] class HadoopKerberosKeytabResolverStep(
       dtSecret = Some(secretDT))
   }
 
-  // Functions that should be in SparkHadoopUtil with Rebase to 2.2
+  // Functions that should be in Core with Rebase to 2.3
   @deprecated("Moved to core in 2.2", "2.2")
-  private def obtainCredentials(instance: Any, args: AnyRef*): Long = {
-    val method = Class
-      .forName("org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager")
-      .getMethod("obtainCredentials", classOf[Configuration], classOf[Configuration])
-    method.setAccessible(true)
-    method.invoke(instance, args: _*).asInstanceOf[Long]
+  private def getTokenRenewalInterval(
+    renewedTokens: Iterable[Token[_ <: TokenIdentifier]],
+    hadoopConf: Configuration): Option[Long] = {
+      val renewIntervals = renewedTokens.filter {
+        _.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier]}
+        .flatMap { token =>
+        Try {
+          val newExpiration = token.renew(hadoopConf)
+          val identifier = token.decodeIdentifier().asInstanceOf[AbstractDelegationTokenIdentifier]
+          val interval = newExpiration - identifier.getIssueDate
+          logInfo(s"Renewal interval is $interval for token ${token.getKind.toString}")
+          interval
+        }.toOption}
+      if (renewIntervals.isEmpty) None else Some(renewIntervals.min)
   }
-   @deprecated("Moved to core in 2.2", "2.2")
-   // This method will instead be using HadoopDelegationTokenManager from Spark 2.2
-   private def newHadoopTokenManager(args: AnyRef*): Any = {
-     val constructor = Class
-       .forName("org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager")
-       .getConstructor(classOf[SparkConf], classOf[Configuration])
-     constructor.setAccessible(true)
-     constructor.newInstance(args: _*)
-   }
+
   @deprecated("Moved to core in 2.2", "2.2")
   private def serialize(creds: Credentials): Array[Byte] = {
     val byteStream = new ByteArrayOutputStream

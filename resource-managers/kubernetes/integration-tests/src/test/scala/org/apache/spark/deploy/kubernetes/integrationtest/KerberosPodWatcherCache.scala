@@ -17,69 +17,207 @@
 
 package org.apache.spark.deploy.kubernetes.integrationtest
 
-private[spark] class KerberosPodWatcherCache() {
+import java.util.concurrent.locks.{Condition, Lock, ReentrantLock}
+
+import scala.collection.JavaConverters._
+
+import io.fabric8.kubernetes.api.model.{Pod, Service}
+import io.fabric8.kubernetes.client.{KubernetesClientException, Watch, Watcher}
+import io.fabric8.kubernetes.client.Watcher.Action
+
+import org.apache.spark.internal.Logging
 
 
-//                                         client: KubernetesClient,
-//                                         dsNamespace: String,
-//                                         dsLabels: Map[String, String]) extends Logging {
-//
-//  private var shufflePodCache = scala.collection.mutable.Map[String, String]()
-//  private var watcher: Watch = _
-//
-//  def start(): Unit = {
-//    // seed the initial cache.
-//    val pods = client.pods()
-//      .inNamespace(dsNamespace).withLabels(dsLabels.asJava).list()
-//    pods.getItems.asScala.foreach {
-//      pod =>
-//        if (Readiness.isReady(pod)) {
-//          addShufflePodToCache(pod)
-//        } else {
-//          logWarning(s"Found unready shuffle pod ${pod.getMetadata.getName} " +
-//            s"on node ${pod.getSpec.getNodeName}")
-//        }
-//    }
-//
-//    watcher = client
-//      .pods()
-//      .inNamespace(dsNamespace)
-//      .withLabels(dsLabels.asJava)
-//      .watch(new Watcher[Pod] {
-//        override def eventReceived(action: Watcher.Action, p: Pod): Unit = {
-//          action match {
-//            case Action.DELETED | Action.ERROR =>
-//              shufflePodCache.remove(p.getSpec.getNodeName)
-//            case Action.ADDED | Action.MODIFIED if Readiness.isReady(p) =>
-//              addShufflePodToCache(p)
-//          }
-//        }
-//        override def onClose(e: KubernetesClientException): Unit = {}
-//      })
-//  }
-//
-//  private def addShufflePodToCache(pod: Pod): Unit = {
-//    if (shufflePodCache.contains(pod.getSpec.getNodeName)) {
-//      val registeredPodName = shufflePodCache.get(pod.getSpec.getNodeName).get
-//      logError(s"Ambiguous specification of shuffle service pod. " +
-//        s"Found multiple matching pods: ${pod.getMetadata.getName}, " +
-//        s"${registeredPodName} on ${pod.getSpec.getNodeName}")
-//
-//      throw new SparkException(s"Ambiguous specification of shuffle service pod. " +
-//        s"Found multiple matching pods: ${pod.getMetadata.getName}, " +
-//        s"${registeredPodName} on ${pod.getSpec.getNodeName}")
-//    } else {
-//      shufflePodCache(pod.getSpec.getNodeName) = pod.getStatus.getPodIP
-//    }
-//  }
-//
-//  def stop(): Unit = {
-//    watcher.close()
-//  }
-//
-//  def getShufflePodForExecutor(executorNode: String): String = {
-//    shufflePodCache.get(executorNode)
-//      .getOrElse(throw new SparkException(s"Unable to find shuffle pod on node $executorNode"))
-//  }
+private[spark] class KerberosPodWatcherCache(
+  kerberosUtils: KerberosUtils,
+  labels: Map[String, String]) extends Logging {
+  private val kubernetesClient = kerberosUtils.getClient
+  private val namespace = kerberosUtils.getNamespace
+  private var podWatcher: Watch = _
+  private var serviceWatcher: Watch = _
+  private var podCache =
+     scala.collection.mutable.Map[String, String]()
+  private var serviceCache =
+    scala.collection.mutable.Map[String, String]()
+  private var lock: Lock = new ReentrantLock()
+  private var kdcRunning: Condition = lock.newCondition()
+  private var nnRunning: Condition = lock.newCondition()
+  private var dnRunning: Condition = lock.newCondition()
+  private var dpRunning: Condition = lock.newCondition()
+  private var kdcIsUp: Boolean = false
+  private var nnIsUp: Boolean = false
+  private var dnIsUp: Boolean = false
+  private var dpIsUp: Boolean = false
+  private var kdcSpawned: Boolean = false
+  private var nnSpawned: Boolean = false
+  private var dnSpawned: Boolean = false
+  private var dpSpawned: Boolean = false
+  private val blockingThread = new Thread(new Runnable {
+     override def run(): Unit = {
+       logInfo("Beginning of Cluster lock")
+       lock.lock()
+       try {
+         while (!kdcIsUp) kdcRunning.await()
+         while (!nnIsUp) nnRunning.await()
+         while (!dnIsUp) dnRunning.await()
+         while (!dpIsUp) dpRunning.await()
+       } finally {
+         logInfo("Ending the Cluster lock")
+         lock.unlock()
+         stop()
+       }
+     }
+   })
+  private val podWatcherThread = new Thread(new Runnable {
+    override def run(): Unit = {
+      logInfo("Beginning the watch of Pods")
+      podWatcher = kubernetesClient
+        .pods()
+        .withLabels(labels.asJava)
+        .watch(new Watcher[Pod] {
+          override def onClose(cause: KubernetesClientException): Unit =
+            logInfo("Ending the watch of Pods")
+          override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
+            val name = resource.getMetadata.getName
+            action match {
+              case Action.DELETED | Action.ERROR =>
+                logInfo(s"$name either deleted or error")
+                podCache.remove(name)
+              case Action.ADDED | Action.MODIFIED =>
+                val phase = resource.getStatus.getPhase
+                logInfo(s"$name is as $phase")
+                podCache(name) = phase
+                if (maybeDeploymentAndServiceDone(name)) {
+                  val modifyAndSignal: Runnable = new MSThread(name)
+                  new Thread(modifyAndSignal).start()
+                }}}})
+    }})
+
+  private val serviceWatcherThread = new Thread(new Runnable {
+    override def run(): Unit = {
+      logInfo("Beginning the watch of Services")
+      serviceWatcher = kubernetesClient
+        .services()
+        .withLabels(labels.asJava)
+        .watch(new Watcher[Service] {
+          override def onClose(cause: KubernetesClientException): Unit =
+            logInfo("Ending the watch of Services")
+          override def eventReceived(action: Watcher.Action, resource: Service): Unit = {
+            val name = resource.getMetadata.getName
+            action match {
+              case Action.DELETED | Action.ERROR =>
+                logInfo(s"$name either deleted or error")
+                serviceCache.remove(name)
+              case Action.ADDED | Action.MODIFIED =>
+                val bound = resource.getSpec.getSelector.get("kerberosService")
+                logInfo(s"$name is bounded to $bound")
+                serviceCache(name) = bound
+                if (maybeDeploymentAndServiceDone(name)) {
+                  val modifyAndSignal: Runnable = new MSThread(name)
+                  new Thread(modifyAndSignal).start()
+                }}}})
+      logInfo("Launching the Cluster")
+      if (!kdcSpawned) {
+        logInfo("Launching the KDC Node")
+        kdcSpawned = true
+        deploy(kerberosUtils.getKDC)
+      }
+    }})
+  def start(): Unit = {
+    blockingThread.start()
+    podWatcherThread.start()
+    serviceWatcherThread.start()
+    blockingThread.join()
+    podWatcherThread.join()
+    serviceWatcherThread.join()
+  }
+  def stop(): Unit = {
+    podWatcher.close()
+    serviceWatcher.close()
+  }
+
+  private def maybeDeploymentAndServiceDone(name: String): Boolean = {
+    val finished = podCache.get(name).contains("Running") &&
+      serviceCache.get(name).contains(name)
+    if (!finished) {
+      logInfo(s"$name is not up with a service")
+      if (name == "kdc") kdcIsUp = false
+      else if (name == "nn") nnIsUp = false
+      else if (name == "dn1") dnIsUp = false
+      else if (name == "data-populator") dpIsUp = false
+    }
+    finished
+  }
+
+  private def deploy(kdc: KerberosDeployment) : Unit = {
+    kubernetesClient
+      .extensions().deployments().inNamespace(namespace).create(kdc.podDeployment)
+    kubernetesClient
+      .services().inNamespace(namespace).create(kdc.service)
+  }
+
+  private class MSThread(name: String) extends Runnable {
+    override def run(): Unit = {
+      logInfo(s"$name Node and Service is up")
+      lock.lock()
+      if (name == "kdc") {
+        kdcIsUp = true
+        logInfo(s"kdc has signaled")
+        try {
+          kdcRunning.signalAll()
+        } finally {
+          lock.unlock()
+        }
+        if (!nnSpawned) {
+          logInfo("Launching the NN Node")
+          nnSpawned = true
+          deploy(kerberosUtils.getNN)
+        }
+      }
+      else if (name == "nn") {
+        while (!kdcIsUp) kdcRunning.await()
+        nnIsUp = true
+        logInfo(s"nn has signaled")
+        try {
+          nnRunning.signalAll()
+        } finally {
+          lock.unlock()
+        }
+        if (!dnSpawned) {
+          logInfo("Launching the DN Node")
+          dnSpawned = true
+          deploy(kerberosUtils.getDN)
+        }
+      }
+      else if (name == "dn1") {
+        while (!kdcIsUp) kdcRunning.await()
+        while (!nnIsUp) nnRunning.await()
+        dnIsUp = true
+        logInfo(s"dn1 has signaled")
+        try {
+          dnRunning.signalAll()
+        } finally {
+          lock.unlock()
+        }
+        if (!dpSpawned) {
+          logInfo("Launching the DP Node")
+          dpSpawned = true
+          deploy(kerberosUtils.getDP)
+        }
+      }
+      else if (name == "data-populator") {
+        while (!kdcIsUp) kdcRunning.await()
+        while (!nnIsUp) nnRunning.await()
+        while (!dpIsUp) dnRunning.await()
+        dpIsUp = true
+        logInfo(s"data-populator has signaled")
+        try {
+          dpRunning.signalAll()
+        } finally {
+          lock.unlock()
+        }
+
+      }
+    }
+  }
 }
-

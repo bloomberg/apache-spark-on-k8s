@@ -18,10 +18,15 @@ package org.apache.spark.deploy.kubernetes.integrationtest
 
 import java.io.{File, FileInputStream}
 
+import scala.collection.JavaConverters._
+
+import io.fabric8.kubernetes.api.model.KeyToPathBuilder
 import io.fabric8.kubernetes.api.model.extensions.{Deployment, DeploymentBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.deploy.kubernetes.submit.ContainerNameEqualityPredicate
+
+
 
  /**
   * Stuff
@@ -29,52 +34,84 @@ import org.apache.spark.deploy.kubernetes.submit.ContainerNameEqualityPredicate
 private[spark] class KerberosTestPodLauncher(
   kubernetesClient: KubernetesClient,
   namespace: String) {
-
-  private val yamlLocation = "kerberos-yml/kerberos-test.yml"
-  def startKerberosTest(resource: String, className: String, appLabel: String): Unit = {
-    kubernetesClient.load(new FileInputStream(new File(yamlLocation)))
-      .get().get(0) match {
-      case deployment: Deployment =>
-        val deploymentWithEnv: Deployment = new DeploymentBuilder(deployment)
-        .editSpec()
-          .editTemplate()
-            .editSpec()
-              .editMatchingContainer(new ContainerNameEqualityPredicate(
-                deployment.getMetadata.getName))
-                .addNewEnv()
-                  .withName("NAMESPACE")
-                  .withValue(namespace)
-                  .endEnv()
-                .addNewEnv()
-                  .withName("MASTER_URL")
-                  .withValue(kubernetesClient.getMasterUrl.toString)
-                .endEnv()
-                .addNewEnv()
-                  .withName("SUBMIT_RESOURCE")
-                  .withValue(resource)
+   private val yamlLocation = "kerberos-yml/kerberos-test.yml"
+   private val kerberosFiles = Seq("krb5.conf", "core-site.xml", "hdfs-site.xml")
+   private val KRB_VOLUME = "krb5-conf"
+   private val KRB_FILE_DIR = "/tmp"
+   private val KRB_CONFIG_MAP_NAME = "krb-config-map"
+   private val HADOOP_CONF_DIR_PATH = "/opt/spark/hconf"
+   private val keyPaths = kerberosFiles.map(file =>
+     new KeyToPathBuilder()
+       .withKey(file)
+       .withPath(file)
+       .build()).toList
+   def startKerberosTest(resource: String, className: String, appLabel: String): Unit = {
+     kubernetesClient.load(new FileInputStream(new File(yamlLocation)))
+       .get().get(0) match {
+       case deployment: Deployment =>
+         val deploymentWithEnv: Deployment = new DeploymentBuilder(deployment)
+         .editSpec()
+           .editTemplate()
+             .editSpec()
+             .addNewVolume()
+               .withName(KRB_VOLUME)
+               .withNewConfigMap()
+                 .withName(KRB_CONFIG_MAP_NAME)
+                 .withItems(keyPaths.asJava)
+                 .endConfigMap()
+               .endVolume()
+               .editMatchingContainer(new ContainerNameEqualityPredicate(
+                 deployment.getMetadata.getName))
+                 .addNewEnv()
+                   .withName("NAMESPACE")
+                   .withValue(namespace)
+                   .endEnv()
+                 .addNewEnv()
+                   .withName("MASTER_URL")
+                   .withValue(kubernetesClient.getMasterUrl.toString)
                  .endEnv()
-                .addNewEnv()
-                  .withName("CLASS_NAME")
-                  .withValue(className)
+                 .addNewEnv()
+                   .withName("SUBMIT_RESOURCE")
+                   .withValue(resource)
                   .endEnv()
-                .addNewEnv()
-                  .withName("HADOOP_CONF_DIR")
-                  .withValue("hconf")
-                  .endEnv()
-                .addNewEnv()
-                  .withName("APP_LOCATOR_LABEL")
-                  .withValue(appLabel)
-                  .endEnv()
-                .addNewEnv()
-                  .withName("SPARK_PRINT_LAUNCH_COMMAND")
-                  .withValue("true")
-                  .endEnv()
-                .endContainer()
-              .endSpec()
-            .endTemplate()
-          .endSpec()
-        .build()
-        kubernetesClient.extensions().deployments()
-          .inNamespace(namespace).create(deploymentWithEnv)}
+                 .addNewEnv()
+                   .withName("CLASS_NAME")
+                   .withValue(className)
+                   .endEnv()
+                 .addNewEnv()
+                   .withName("HADOOP_CONF_DIR")
+                   .withValue(HADOOP_CONF_DIR_PATH)
+                   .endEnv()
+                 .addNewEnv()
+                   .withName("APP_LOCATOR_LABEL")
+                   .withValue(appLabel)
+                   .endEnv()
+                 .addNewEnv()
+                   .withName("SPARK_PRINT_LAUNCH_COMMAND")
+                   .withValue("true")
+                   .endEnv()
+                 .addNewEnv()
+                   .withName("TMP_KRB_LOC")
+                   .withValue(s"$KRB_FILE_DIR/${kerberosFiles.head}")
+                   .endEnv()
+                 .addNewEnv()
+                   .withName("TMP_CORE_LOC")
+                   .withValue(s"$KRB_FILE_DIR/${kerberosFiles(1)}")
+                   .endEnv()
+                 .addNewEnv()
+                   .withName("TMP_HDFS_LOC")
+                   .withValue(s"$KRB_FILE_DIR/${kerberosFiles(2)}")
+                   .endEnv()
+                 .addNewVolumeMount()
+                   .withName(KRB_VOLUME)
+                   .withMountPath(KRB_FILE_DIR)
+                   .endVolumeMount()
+                 .endContainer()
+               .endSpec()
+             .endTemplate()
+           .endSpec()
+         .build()
+         kubernetesClient.extensions().deployments()
+           .inNamespace(namespace).create(deploymentWithEnv)}
   }
 }

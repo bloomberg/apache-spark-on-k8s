@@ -16,26 +16,9 @@
  */
 package org.apache.spark.deploy.kubernetes.integrationtest
 
-import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.api.model.Service
+import io.fabric8.kubernetes.api.model.extensions.Deployment
 
- /**
-  * Stuff
-  */
-private[spark] class KerberizedHadoopClusterLauncher(
-    kubernetesClient: KubernetesClient,
-    namespace: String) {
-   private val LABELS = Map("job" -> "kerberostest")
-
-   def launchKerberizedCluster(): Unit = {
-     val kerberosUtils = new KerberosUtils(kubernetesClient, namespace)
-     val pvWatcherCache = new KerberosPVWatcherCache(kerberosUtils, LABELS)
-     pvWatcherCache.start()
-     pvWatcherCache.stop()
-     val cmWatcherCache = new KerberosCMWatcherCache(kerberosUtils)
-     cmWatcherCache.start()
-     cmWatcherCache.stop()
-     val podWatcherCache = new KerberosPodWatcherCache(kerberosUtils, LABELS)
-     podWatcherCache.start()
-     podWatcherCache.stop()
-   }
-}
+private[spark] case class KerberosDeployment(
+  podDeployment: Deployment,
+  service: Service)

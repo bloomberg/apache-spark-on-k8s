@@ -46,6 +46,10 @@
     <name>dfs.namenode.kerberos.internal.spnego.principal</name>
     <value>HTTP/nn.REPLACE_ME.svc.cluster.local@CLUSTER.LOCAL</value>
   </property>
+  <property>
+    <name>dfs.namenode.rpc-address</name>
+    <value>nn.REPLACE_ME.svc.cluster.local:9000</value>
+  </property>
 
 
   <!-- For testing, we want tokens to expire FAST -->
@@ -105,6 +109,14 @@
   <property>
     <name>dfs.datanode.data.dir.perm</name>
     <value>700</value> 
+  </property>
+  <property>
+    <name>dfs.namenode.name.dir</name>
+    <value>file:///hadoop/etc/data</value>
+  </property>
+  <property>
+    <name>dfs.datanode.name.dir</name>
+    <value>file:///hadoop/etc/data</value>
   </property>
   <property>
     <name>dfs.datanode.keytab.file</name>
