@@ -20,16 +20,13 @@ import java.nio.file.Paths
 import java.util.UUID
 
 import io.fabric8.kubernetes.client.internal.readiness.Readiness
-
-import org.apache.spark.{SparkConf, SSLOptions, SparkFunSuite}
-
+import org.apache.spark.{SSLOptions, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.kubernetes.config._
-
 import org.apache.spark.deploy.kubernetes.integrationtest.backend.IntegrationTestBackendFactory
 import org.apache.spark.deploy.kubernetes.integrationtest.backend.minikube.Minikube
 import org.apache.spark.deploy.kubernetes.integrationtest.constants.MINIKUBE_TEST_BACKEND
+import org.apache.spark.deploy.kubernetes.integrationtest.kerberos.KerberosDriverWatcherCache
 import org.apache.spark.deploy.kubernetes.submit._
-
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Minutes, Seconds, Span}
@@ -96,22 +93,28 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
     assume(testBackend.name == MINIKUBE_TEST_BACKEND)
     launchKerberizedCluster()
     createKerberosTestPod(CONTAINER_LOCAL_MAIN_APP_RESOURCE, HDFS_TEST_CLASS, APP_LOCATOR_LABEL)
+    val kubernetesClient = kubernetesTestComponents.kubernetesClient
+    val driverWatcherCache = new KerberosDriverWatcherCache(
+      kubernetesClient,
+      Map("spark-app-locator" -> APP_LOCATOR_LABEL))
+    driverWatcherCache.start()
+    driverWatcherCache.stop()
     val expectedLogOnCompletion = Seq("Something something something")
-//    val driverPod = kubernetesTestComponents.kubernetesClient
-//      .pods()
-//      .withLabel("spark-app-locator", APP_LOCATOR_LABEL)
-//      .list()
-//      .getItems
-//      .get(0)
-//    Eventually.eventually(TIMEOUT, INTERVAL) {
-//      expectedLogOnCompletion.foreach { e =>
-//        assert(kubernetesTestComponents.kubernetesClient
-//          .pods()
-//          .withName(driverPod.getMetadata.getName)
-//          .getLog
-//          .contains(e), "The application did not complete.")
-//      }
-//    }
+    val driverPod = kubernetesClient
+      .pods()
+      .withLabel("spark-app-locator", APP_LOCATOR_LABEL)
+      .list()
+      .getItems
+      .get(0)
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      expectedLogOnCompletion.foreach { e =>
+        assert(kubernetesClient
+          .pods()
+          .withName(driverPod.getMetadata.getName)
+          .getLog
+          .contains(e), "The application did not complete.")
+      }
+    }
   }
 
 //  test("Run PySpark Job on file from SUBMITTER with --py-files") {

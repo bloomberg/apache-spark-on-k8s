@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.kubernetes.integrationtest
+package org.apache.spark.deploy.kubernetes.integrationtest.kerberos
 
 import java.util.concurrent.locks.{Condition, Lock, ReentrantLock}
 
@@ -26,6 +26,7 @@ import io.fabric8.kubernetes.client.{KubernetesClientException, Watch, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
 
 import org.apache.spark.internal.Logging
+
 
 private[spark] class KerberosPVWatcherCache(
     kerberosUtils: KerberosUtils,
@@ -91,7 +92,7 @@ private[spark] class KerberosPVWatcherCache(
           .withLabels(labels.asJava)
           .watch(new Watcher[PersistentVolumeClaim] {
             override def onClose(cause: KubernetesClientException): Unit =
-              logInfo("Ending the watch of Persistent Volumes")
+              logInfo("Ending the watch of Persistent Volume Claims")
             override def eventReceived(
               action: Watcher.Action,
               resource: PersistentVolumeClaim): Unit = {

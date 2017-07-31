@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.kubernetes.integrationtest
+package org.apache.spark.deploy.kubernetes.integrationtest.kerberos
 
 import java.util.concurrent.locks.{Condition, Lock, ReentrantLock}
 
@@ -36,7 +36,7 @@ private[spark] class KerberosPodWatcherCache(
   private var podWatcher: Watch = _
   private var serviceWatcher: Watch = _
   private var podCache =
-     scala.collection.mutable.Map[String, String]()
+    scala.collection.mutable.Map[String, String]()
   private var serviceCache =
     scala.collection.mutable.Map[String, String]()
   private var lock: Lock = new ReentrantLock()
@@ -52,22 +52,24 @@ private[spark] class KerberosPodWatcherCache(
   private var nnSpawned: Boolean = false
   private var dnSpawned: Boolean = false
   private var dpSpawned: Boolean = false
+
   private val blockingThread = new Thread(new Runnable {
-     override def run(): Unit = {
-       logInfo("Beginning of Cluster lock")
-       lock.lock()
-       try {
-         while (!kdcIsUp) kdcRunning.await()
-         while (!nnIsUp) nnRunning.await()
-         while (!dnIsUp) dnRunning.await()
-         while (!dpIsUp) dpRunning.await()
-       } finally {
-         logInfo("Ending the Cluster lock")
-         lock.unlock()
-         stop()
-       }
-     }
-   })
+    override def run(): Unit = {
+      logInfo("Beginning of Cluster lock")
+      lock.lock()
+      try {
+        while (!kdcIsUp) kdcRunning.await()
+        while (!nnIsUp) nnRunning.await()
+        while (!dnIsUp) dnRunning.await()
+        while (!dpIsUp) dpRunning.await()
+      } finally {
+        logInfo("Ending the Cluster lock")
+        lock.unlock()
+        stop()
+      }
+    }
+  })
+
   private val podWatcherThread = new Thread(new Runnable {
     override def run(): Unit = {
       logInfo("Beginning the watch of Pods")
@@ -79,16 +81,17 @@ private[spark] class KerberosPodWatcherCache(
             logInfo("Ending the watch of Pods")
           override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
             val name = resource.getMetadata.getName
+            val keyName = podNameParse(name)
             action match {
               case Action.DELETED | Action.ERROR =>
                 logInfo(s"$name either deleted or error")
-                podCache.remove(name)
+                podCache.remove(keyName)
               case Action.ADDED | Action.MODIFIED =>
                 val phase = resource.getStatus.getPhase
                 logInfo(s"$name is as $phase")
-                podCache(name) = phase
-                if (maybeDeploymentAndServiceDone(name)) {
-                  val modifyAndSignal: Runnable = new MSThread(name)
+                podCache(keyName) = phase
+                if (maybeDeploymentAndServiceDone(keyName)) {
+                  val modifyAndSignal: Runnable = new MSThread(keyName)
                   new Thread(modifyAndSignal).start()
                 }}}})
     }})
@@ -123,6 +126,7 @@ private[spark] class KerberosPodWatcherCache(
         deploy(kerberosUtils.getKDC)
       }
     }})
+
   def start(): Unit = {
     blockingThread.start()
     podWatcherThread.start()
@@ -131,6 +135,7 @@ private[spark] class KerberosPodWatcherCache(
     podWatcherThread.join()
     serviceWatcherThread.join()
   }
+
   def stop(): Unit = {
     podWatcher.close()
     serviceWatcher.close()
@@ -141,7 +146,7 @@ private[spark] class KerberosPodWatcherCache(
       serviceCache.get(name).contains(name)
     if (!finished) {
       logInfo(s"$name is not up with a service")
-      if (name == "kdc") kdcIsUp = false
+      if (name == "kerberos") kdcIsUp = false
       else if (name == "nn") nnIsUp = false
       else if (name == "dn1") dnIsUp = false
       else if (name == "data-populator") dpIsUp = false
@@ -160,7 +165,7 @@ private[spark] class KerberosPodWatcherCache(
     override def run(): Unit = {
       logInfo(s"$name Node and Service is up")
       lock.lock()
-      if (name == "kdc") {
+      if (name == "kerberos") {
         kdcIsUp = true
         logInfo(s"kdc has signaled")
         try {
@@ -208,7 +213,7 @@ private[spark] class KerberosPodWatcherCache(
       else if (name == "data-populator") {
         while (!kdcIsUp) kdcRunning.await()
         while (!nnIsUp) nnRunning.await()
-        while (!dpIsUp) dnRunning.await()
+        while (!dnIsUp) dnRunning.await()
         dpIsUp = true
         logInfo(s"data-populator has signaled")
         try {
@@ -216,8 +221,16 @@ private[spark] class KerberosPodWatcherCache(
         } finally {
           lock.unlock()
         }
-
       }
+    }
+  }
+
+  private def podNameParse(name: String) : String = {
+    name match {
+      case _ if name.startsWith("kerberos") => "kerberos"
+      case _ if name.startsWith("nn") => "nn"
+      case _ if name.startsWith("dn1") => "dn1"
+      case _ if name.startsWith("data-populator") => "data-populator"
     }
   }
 }

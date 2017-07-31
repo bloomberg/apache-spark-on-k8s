@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.kubernetes.integrationtest
+package org.apache.spark.deploy.kubernetes.integrationtest.kerberos
 
 import java.io.{File, FileInputStream}
 
@@ -26,6 +26,7 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.commons.io.FileUtils.readFileToString
 
 import org.apache.spark.deploy.kubernetes.submit.ContainerNameEqualityPredicate
+
 
 private[spark] class KerberosUtils(
   kubernetesClient: KubernetesClient,

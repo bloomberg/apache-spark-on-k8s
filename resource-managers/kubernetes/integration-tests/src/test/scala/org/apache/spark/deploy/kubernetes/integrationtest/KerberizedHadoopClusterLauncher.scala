@@ -18,6 +18,8 @@ package org.apache.spark.deploy.kubernetes.integrationtest
 
 import io.fabric8.kubernetes.client.KubernetesClient
 
+import org.apache.spark.deploy.kubernetes.integrationtest.kerberos._
+
  /**
   * Stuff
   */

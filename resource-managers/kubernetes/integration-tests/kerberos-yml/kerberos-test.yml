@@ -10,7 +10,9 @@ spec:
         name: kerberos-test
     spec:
       containers:
-      - name: kerberos-test
+      - command: ["/bin/bash"]
+        args: ["/opt/spark/test-env.sh"]
+        name: kerberos-test
         image: kerberos-test:latest
         imagePullPolicy: IfNotPresent
         volumeMounts:

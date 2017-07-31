@@ -11,7 +11,7 @@ spec:
       labels:
         name: hdfs-data-populator
         kerberosService: data-populator
-        job: kerberos-test
+        job: kerberostest
     spec:
       containers:
       - command:

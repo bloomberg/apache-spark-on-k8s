@@ -17,6 +17,7 @@
 package org.apache.spark.deploy.kubernetes.submit.submitsteps.hadoopsteps
 
 import java.io._
+import java.security.PrivilegedExceptionAction
 
 import scala.collection.JavaConverters._
 import scala.util.Try
@@ -30,6 +31,7 @@ import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
 import org.apache.spark.SparkConf
+
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.kubernetes.{KerberosConfBootstrapImpl, PodWithMainContainer}
 import org.apache.spark.deploy.kubernetes.constants._
@@ -44,9 +46,12 @@ private[spark] class HadoopKerberosKeytabResolverStep(
   submissionSparkConf: SparkConf,
   maybePrincipal: Option[String],
   maybeKeytab: Option[File]) extends HadoopConfigurationStep with Logging{
-
-  override def configureContainers(hadoopConfigSpec: HadoopConfigSpec): HadoopConfigSpec = {
-    // FIXME: Pass down hadoopConf so you can call sc.hadoopConfiguration
+   private var originalCredentials: Credentials = _
+   private var dfs : FileSystem = _
+   private var renewer: String = _
+   private var renewedCredentials: Credentials = _
+   private var renewedTokens: Iterable[Token[_ <: TokenIdentifier]] = _
+   override def configureContainers(hadoopConfigSpec: HadoopConfigSpec): HadoopConfigSpec = {
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(submissionSparkConf)
     logInfo(s"Hadoop Configuration: ${hadoopConf.toString}")
     if (!UserGroupInformation.isSecurityEnabled) logError("Hadoop not configuration with Kerberos")
@@ -66,26 +71,30 @@ private[spark] class HadoopKerberosKeytabResolverStep(
       }
     // In the case that keytab is not specified we will read from Local Ticket Cache
     val jobUserUGI = maybeJobUserUGI.getOrElse(UserGroupInformation.getCurrentUser)
-    logInfo(s"Retrieved Job User UGI: $jobUserUGI")
-    val originalCredentials: Credentials = jobUserUGI.getCredentials
-    logInfo(s"Original tokens: ${originalCredentials.toString}")
-    logInfo(s"All tokens: ${originalCredentials.getAllTokens}")
-    logInfo(s"All secret keys: ${originalCredentials.getAllSecretKeys}")
-    val dfs: FileSystem = FileSystem.get(hadoopConf)
-    // This is not necessary with [Spark-20328] since we would be using
-    // Spark core providers to handle delegation token renewal
-    val renewer: String = jobUserUGI.getShortUserName
-    logInfo(s"Renewer is: $renewer")
-    val renewedCredentials: Credentials = new Credentials(originalCredentials)
-    dfs.addDelegationTokens(renewer, renewedCredentials)
-    val renewedTokens = renewedCredentials.getAllTokens.asScala
-    logInfo(s"Renewed tokens: ${renewedCredentials.toString}")
-    logInfo(s"All renewed tokens: ${renewedTokens}")
-    logInfo(s"All renewed secret keys: ${renewedCredentials.getAllSecretKeys}")
+    // It is necessary to run as jobUserUGI because logged in user != Current User
+    jobUserUGI.doAs(new PrivilegedExceptionAction[Void] {
+      override def run(): Void = {
+        logInfo(s"Retrieved Job User UGI: $jobUserUGI")
+        originalCredentials = jobUserUGI.getCredentials
+        logInfo(s"Original tokens: ${originalCredentials.toString}")
+        logInfo(s"All tokens: ${originalCredentials.getAllTokens}")
+        logInfo(s"All secret keys: ${originalCredentials.getAllSecretKeys}")
+        dfs = FileSystem.get(hadoopConf)
+        // This is not necessary with [Spark-20328] since we would be using
+        // Spark core providers to handle delegation token renewal
+        renewer = jobUserUGI.getShortUserName
+        logInfo(s"Renewer is: $renewer")
+        renewedCredentials = new Credentials(originalCredentials)
+        dfs.addDelegationTokens(renewer, renewedCredentials)
+        renewedTokens = renewedCredentials.getAllTokens.asScala
+        logInfo(s"Renewed tokens: ${renewedCredentials.toString}")
+        logInfo(s"All renewed tokens: ${renewedTokens.mkString(",")}")
+        logInfo(s"All renewed secret keys: ${renewedCredentials.getAllSecretKeys}")
+        null
+      }})
     if (renewedTokens.isEmpty) logError("Did not obtain any Delegation Tokens")
     val data = serialize(renewedCredentials)
-    val renewalTime = getTokenRenewalInterval(renewedTokens, hadoopConf)
-      .getOrElse(Long.MaxValue)
+    val renewalTime = getTokenRenewalInterval(renewedTokens, hadoopConf).getOrElse(Long.MaxValue)
     val delegationToken = HDFSDelegationToken(data, renewalTime)
     val initialTokenLabelName = s"$KERBEROS_SECRET_LABEL_PREFIX-1-$renewalTime"
     logInfo(s"Storing dt in $initialTokenLabelName")

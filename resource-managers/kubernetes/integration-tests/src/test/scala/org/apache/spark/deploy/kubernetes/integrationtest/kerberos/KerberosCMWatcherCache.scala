@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.kubernetes.integrationtest
+package org.apache.spark.deploy.kubernetes.integrationtest.kerberos
 
 import java.util.concurrent.locks.{Condition, Lock, ReentrantLock}
 

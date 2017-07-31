@@ -14,10 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.kubernetes.integrationtest
+package org.apache.spark.deploy.kubernetes.integrationtest.kerberos
 
-import io.fabric8.kubernetes.api.model.{PersistentVolume, PersistentVolumeClaim}
+import io.fabric8.kubernetes.api.model.Service
+import io.fabric8.kubernetes.api.model.extensions.Deployment
 
-private[spark] case class KerberosStorage(
-  persistentVolumeClaim: PersistentVolumeClaim,
-  persistentVolume: PersistentVolume)
+private[spark] case class KerberosDeployment(
+  podDeployment: Deployment,
+  service: Service)

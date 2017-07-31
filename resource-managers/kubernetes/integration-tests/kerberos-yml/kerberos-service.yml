@@ -5,7 +5,7 @@ metadata:
     service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
   labels:
     kerberosService: kerberos
-    job: kerberos-test
+    job: kerberostest
   name: kerberos
 spec:
   clusterIP: None
