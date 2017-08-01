@@ -27,7 +27,11 @@ import io.fabric8.kubernetes.client.Watcher.Action
 
 import org.apache.spark.internal.Logging
 
-
+ /**
+  * This class is responsible for ensuring that the persistent volume claims are bounded
+  * to the correct persistent volume and that they are both created before launching the
+  * pods which expect to use them.
+  */
 private[spark] class KerberosPVWatcherCache(
     kerberosUtils: KerberosUtils,
     labels: Map[String, String]) extends Logging {

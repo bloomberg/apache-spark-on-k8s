@@ -27,6 +27,10 @@ import io.fabric8.kubernetes.client.Watcher.Action
 
 import org.apache.spark.internal.Logging
 
+ /**
+  * This class is responsible for ensuring that no logic progresses in the cluster launcher
+  * until a configmap with the HADOOP_CONF_DIR specifications has been created.
+  */
 private[spark] class KerberosCMWatcherCache(kerberosUtils: KerberosUtils) extends Logging {
   private val kubernetesClient = kerberosUtils.getClient
   private val namespace = kerberosUtils.getNamespace

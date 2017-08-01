@@ -19,12 +19,18 @@ package org.apache.spark.deploy.kubernetes
 import io.fabric8.kubernetes.api.model.ContainerBuilder
 
 import org.apache.spark.deploy.kubernetes.constants._
-
+ /**
+  * This is separated out from hadoopsteps because this component can be reused to
+  * set up the Kerberos logic for executors as well.
+  */
 private[spark] trait KerberosConfBootstrap {
+   /**
+     * Bootstraps a main container with an ENV variable
+     * pointing to the data storing the DT in the secret
+     */
   def bootstrapMainContainerAndVolumes(originalPodWithMainContainer: PodWithMainContainer)
     : PodWithMainContainer
 }
-
 private[spark] class KerberosConfBootstrapImpl(
   delegationTokenLabelName: String) extends KerberosConfBootstrap{
   override def bootstrapMainContainerAndVolumes(

@@ -27,6 +27,10 @@ import io.fabric8.kubernetes.client.Watcher.Action
 
 import org.apache.spark.internal.Logging
 
+ /**
+  * This class is responsible for ensuring that the driver-pod launched by the KerberosTestPod
+  * is running before trying to grab its logs for the sake of monitoring success of completition.
+  */
 private[spark] class KerberosDriverWatcherCache(
   kubernetesClient: KubernetesClient,
   labels: Map[String, String]) extends Logging {

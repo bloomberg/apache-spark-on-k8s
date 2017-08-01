@@ -16,4 +16,8 @@
  */
 package org.apache.spark.deploy.kubernetes.submit.submitsteps.hadoopsteps
 
+ /**
+  * This case class contain the information that is important to be stored for
+  * delegation token logic
+  */
 private[spark] case class HDFSDelegationToken(bytes: Array[Byte], renewal: Long)

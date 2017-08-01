@@ -24,7 +24,11 @@ import org.apache.spark.deploy.kubernetes.{HadoopConfBootstrap, PodWithMainConta
 import org.apache.spark.deploy.kubernetes.constants._
 
  /**
-  * Step that configures the ConfigMap + Volumes for the driver
+  * This step is responsible for taking the contents from each file in
+  * HADOOP_CONF_DIR, grabbing its contents as a string and storing each of them
+  * as a key-value pair in a configmap. Each key-value pair will be stored
+  * as a file, via Volume Mounts, later. The HADOOP_CONF_DIR_LOC is passed into the
+  * SchedulerBackend via sparkConf.
   */
 private[spark] class HadoopConfMounterStep(
     hadoopConfigMapName: String,

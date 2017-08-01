@@ -35,7 +35,9 @@ private[spark] class HadoopStepsOrchestrator(
   private val maybePrincipal = submissionSparkConf.get(KUBERNETES_KERBEROS_PRINCIPAL)
   private val maybeKeytab = submissionSparkConf.get(KUBERNETES_KERBEROS_KEYTAB)
     .map(k => new File(k))
-  private val maybeExistingSecret = submissionSparkConf.get(KUBERNETES_KERBEROS_DT_SECRET)
+  private val maybeExistingSecret = submissionSparkConf.get(KUBERNETES_KERBEROS_DT_SECRET_NAME)
+  private val maybeExistingSecretLabel =
+    submissionSparkConf.get(KUBERNETES_KERBEROS_DT_SECRET_LABEL)
   private val hadoopConfigurationFiles = hadoopConfDir.map(conf => getHadoopConfFiles(conf))
      .getOrElse(Seq.empty[File])
 
@@ -52,7 +54,8 @@ private[spark] class HadoopStepsOrchestrator(
       if (maybeKerberosSupport) {
         maybeExistingSecret.map(secretLabel => Some(new HadoopKerberosSecretResolverStep(
          submissionSparkConf,
-         secretLabel))).getOrElse(Some(
+          secretLabel,
+          maybeExistingSecretLabel))).getOrElse(Some(
             new HadoopKerberosKeytabResolverStep(
               submissionSparkConf,
               maybePrincipal,

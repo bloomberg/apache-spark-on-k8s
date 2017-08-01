@@ -31,16 +31,22 @@ import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
 import org.apache.spark.SparkConf
-
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.kubernetes.{KerberosConfBootstrapImpl, PodWithMainContainer}
 import org.apache.spark.deploy.kubernetes.constants._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 
-
-
  /**
-  * Step that configures the ConfigMap + Volumes for the driver
+  * This step does all the heavy lifting for Delegation Token logic. This step
+  * assumes that the job user has either specified a principal and keytab or ran
+  * $kinit before running spark-submit. With a TGT stored locally, by running
+  * UGI.getCurrentUser you are able to obtain the current user, alternatively
+  * you can run UGI.logingUserFromKeytabAndReturnUGI and by running .doAs run
+  * as the logged into user instead of the current user. With the Job User principal
+  * you then retrieve the delegation token from the NameNode and store values in
+  * DelegationToken. Lastly, the class puts the data into a secret. All this is
+  * appended to the current HadoopSpec which in turn will append to the current
+  * DriverSpec.
   */
 private[spark] class HadoopKerberosKeytabResolverStep(
   submissionSparkConf: SparkConf,
@@ -96,7 +102,8 @@ private[spark] class HadoopKerberosKeytabResolverStep(
     val data = serialize(renewedCredentials)
     val renewalTime = getTokenRenewalInterval(renewedTokens, hadoopConf).getOrElse(Long.MaxValue)
     val delegationToken = HDFSDelegationToken(data, renewalTime)
-    val initialTokenLabelName = s"$KERBEROS_SECRET_LABEL_PREFIX-1-$renewalTime"
+    val currentTime: Long = System.currentTimeMillis()
+    val initialTokenLabelName = s"$KERBEROS_SECRET_LABEL_PREFIX-$currentTime-$renewalTime"
     logInfo(s"Storing dt in $initialTokenLabelName")
     val secretDT =
       new SecretBuilder()

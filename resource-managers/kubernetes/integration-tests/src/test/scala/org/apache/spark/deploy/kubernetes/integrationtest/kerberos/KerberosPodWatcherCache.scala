@@ -27,7 +27,11 @@ import io.fabric8.kubernetes.client.Watcher.Action
 
 import org.apache.spark.internal.Logging
 
-
+ /**
+  * This class if used to ensure that the Hadoop cluster that is launched is executed
+  * in this order: KDC --> NN --> DN --> Data-Populator and that each one of these nodes
+  * is running before launching the kerberos test.
+  */
 private[spark] class KerberosPodWatcherCache(
   kerberosUtils: KerberosUtils,
   labels: Map[String, String]) extends Logging {

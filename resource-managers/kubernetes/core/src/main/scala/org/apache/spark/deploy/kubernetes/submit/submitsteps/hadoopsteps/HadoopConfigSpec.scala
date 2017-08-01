@@ -28,7 +28,7 @@ import io.fabric8.kubernetes.api.model.{Container, Pod, Secret}
   *   the hadoop logic needs)
   * - The properties that will be stored into the config map which have (key, value)
   *   pairs of (path, data)
-  * - The secret containing a DT, either previously specified or re-built
+  * - The secret containing a DT, either previously specified or built on the fly
   */
 private[spark] case class HadoopConfigSpec(
   additionalDriverSparkConf: Map[String, String],

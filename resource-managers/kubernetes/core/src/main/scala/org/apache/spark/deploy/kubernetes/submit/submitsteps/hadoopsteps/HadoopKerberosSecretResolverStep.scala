@@ -20,10 +20,14 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.kubernetes.{KerberosConfBootstrapImpl, PodWithMainContainer}
 
  /**
-  * Step that configures the ConfigMap + Volumes for the driver
+  * This step assumes that you have already done all the heavy lifting in retrieving a
+  * delegation token and storing the following data in a secret before running this job.
+  * This step requires that you just specify the secret name and label corresponding to the
+  * data where the delegation token is stored.
   */
 private[spark] class HadoopKerberosSecretResolverStep(
   submissionSparkConf: SparkConf,
+  tokenSecretName: String,
   tokenLabelName: String) extends HadoopConfigurationStep {
 
   override def configureContainers(hadoopConfigSpec: HadoopConfigSpec): HadoopConfigSpec = {

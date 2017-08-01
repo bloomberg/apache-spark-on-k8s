@@ -198,6 +198,8 @@ private[spark] object Client {
   def main(args: Array[String]): Unit = {
     val parsedArguments = ClientArguments.fromCommandLineArgs(args)
     val sparkConf = new SparkConf()
+    // hadoopConfDir is passed into Client#run() to allow for us to
+    // test this env variable within the integration test environment
     val hadoopConfDir = sys.env.get("HADOOP_CONF_DIR")
     run(sparkConf, parsedArguments, hadoopConfDir)
   }

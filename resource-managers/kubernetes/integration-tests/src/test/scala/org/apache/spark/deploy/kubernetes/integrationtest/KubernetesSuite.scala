@@ -73,21 +73,21 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
 
   after {
     kubernetesTestComponents.deleteKubernetesResources()
-    // kubernetesTestComponents.deleteNamespace()
+    kubernetesTestComponents.deleteNamespace()
   }
 
-//  test("Include HADOOP_CONF for HDFS based jobs") {
-//    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
-//    // Ensuring that HADOOP_CONF_DIR variable is set, could also be one via env HADOOP_CONF_DIR
-//    sparkConf.setJars(Seq(CONTAINER_LOCAL_HELPER_JAR_PATH))
-//    runSparkApplicationAndVerifyCompletion(
-//      JavaMainAppResource(CONTAINER_LOCAL_MAIN_APP_RESOURCE),
-//      SPARK_PI_MAIN_CLASS,
-//      Seq("HADOOP_CONF_DIR defined. Mounting HDFS specific .xml files", "Pi is roughly 3"),
-//      Array("5"),
-//      Seq.empty[String],
-//      Some("src/test/resources"))
-//  }
+  test("Include HADOOP_CONF for HDFS based jobs") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+    // Ensuring that HADOOP_CONF_DIR variable is set, could also be one via env HADOOP_CONF_DIR
+    sparkConf.setJars(Seq(CONTAINER_LOCAL_HELPER_JAR_PATH))
+    runSparkApplicationAndVerifyCompletion(
+      JavaMainAppResource(CONTAINER_LOCAL_MAIN_APP_RESOURCE),
+      SPARK_PI_MAIN_CLASS,
+      Seq("HADOOP_CONF_DIR defined. Mounting HDFS specific .xml files", "Pi is roughly 3"),
+      Array("5"),
+      Seq.empty[String],
+      Some("src/test/resources"))
+  }
 
   test("Secure HDFS test with HDFS keytab") {
     assume(testBackend.name == MINIKUBE_TEST_BACKEND)

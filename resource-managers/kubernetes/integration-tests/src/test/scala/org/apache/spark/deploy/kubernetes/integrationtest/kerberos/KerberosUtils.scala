@@ -27,7 +27,9 @@ import org.apache.commons.io.FileUtils.readFileToString
 
 import org.apache.spark.deploy.kubernetes.submit.ContainerNameEqualityPredicate
 
-
+ /**
+  * This class is responsible for handling all Utils and Constants necessary for testing
+  */
 private[spark] class KerberosUtils(
   kubernetesClient: KubernetesClient,
   namespace: String) {

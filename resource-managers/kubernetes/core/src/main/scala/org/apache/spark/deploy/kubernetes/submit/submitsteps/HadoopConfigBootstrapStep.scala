@@ -23,9 +23,11 @@ import io.fabric8.kubernetes.api.model.ConfigMapBuilder
 import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.deploy.kubernetes.submit.submitsteps.hadoopsteps.{HadoopConfigSpec, HadoopConfigurationStep}
 
-
  /**
-  * Configures the driverSpec that bootstraps dependencies into the driver pod.
+  * This class configures the driverSpec with hadoop configuration logic which includes
+  * volume mounts, config maps, and environment variable manipulation. The steps are
+  * resolved with the orchestrator and they are run modifying the HadoopSpec with each
+  * step. The final HadoopSpec's contents will be appended to the driverSpec.
   */
 private[spark] class HadoopConfigBootstrapStep(
   hadoopConfigurationSteps: Seq[HadoopConfigurationStep],

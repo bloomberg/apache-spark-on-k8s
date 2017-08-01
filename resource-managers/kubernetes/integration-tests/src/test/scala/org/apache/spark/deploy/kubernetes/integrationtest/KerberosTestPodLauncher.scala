@@ -27,7 +27,10 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.spark.deploy.kubernetes.submit.ContainerNameEqualityPredicate
 
  /**
-  * Stuff
+  * This class is responsible for launching a pod that runs spark-submit to simulate
+  * the necessary global environmental variables and files expected for a Kerberos task.
+  * In this test we specify HADOOP_CONF_DIR and ensure that for any arbitrary namespace
+  * the krb5.conf, core-site.xml, and hdfs-site.xml are resolved accordingly.
   */
 private[spark] class KerberosTestPodLauncher(
   kubernetesClient: KubernetesClient,

@@ -17,7 +17,7 @@
 package org.apache.spark.deploy.kubernetes.submit.submitsteps.hadoopsteps
 
  /**
-  * Represents a step in preparing the driver
+  * Represents a step in preparing the driver with Hadoop Configuration logic.
   */
 private[spark] trait HadoopConfigurationStep {
 

@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
 
 /**
  * This is separated out from the HadoopConf steps API because this component can be reused to
- * set up the hadoop-conf for executors as well.
+ * set up the Hadoop Configuration for executors as well.
  */
 private[spark] trait HadoopConfBootstrap {
  /**

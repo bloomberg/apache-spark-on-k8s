@@ -18,6 +18,11 @@ package org.apache.spark.deploy.kubernetes
 
 import io.fabric8.kubernetes.api.model.{Container, Pod}
 
+ /**
+  * The purpose of this case class is so that we can package together
+  * the driver pod with its container so we can bootstrap and modify
+  * the class instead of each component seperately
+  */
 private[spark] case class PodWithMainContainer(
     pod: Pod,
     mainContainer: Container)
