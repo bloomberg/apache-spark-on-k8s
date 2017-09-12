@@ -16,7 +16,10 @@
  */
 package org.apache.spark.deploy.kubernetes
 
-import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 
 private[spark] class HadoopUGIUtil{
   def getCurrentUser: UserGroupInformation = UserGroupInformation.getCurrentUser
@@ -24,4 +27,7 @@ private[spark] class HadoopUGIUtil{
   def isSecurityEnabled: Boolean = UserGroupInformation.isSecurityEnabled
   def loginUserFromKeytabAndReturnUGI(principal: String, keytab: String): UserGroupInformation =
     UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
+  def dfsAddDelegationToken(hadoopConf: Configuration, renewer: String, creds: Credentials)
+  : Iterable[Token[_ <: TokenIdentifier]] =
+    FileSystem.get(hadoopConf).addDelegationTokens(renewer, creds)
 }

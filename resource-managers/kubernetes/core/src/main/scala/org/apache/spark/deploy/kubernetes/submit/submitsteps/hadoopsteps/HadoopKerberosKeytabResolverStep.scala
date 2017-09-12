@@ -54,7 +54,6 @@ private[spark] class HadoopKerberosKeytabResolverStep(
   maybeKeytab: Option[File],
   hadoopUGI: HadoopUGIUtil) extends HadoopConfigurationStep with Logging{
     private var originalCredentials: Credentials = _
-    private var dfs : FileSystem = _
     private var renewer: String = _
     private var credentials: Credentials = _
     private var tokens: Iterable[Token[_ <: TokenIdentifier]] = _
@@ -87,13 +86,12 @@ private[spark] class HadoopKerberosKeytabResolverStep(
         logDebug(s"Original tokens: ${originalCredentials.toString}")
         logDebug(s"All tokens: ${originalCredentials.getAllTokens}")
         logDebug(s"All secret keys: ${originalCredentials.getAllSecretKeys}")
-        dfs = FileSystem.get(hadoopConf)
         // This is not necessary with [Spark-20328] since we would be using
         // Spark core providers to handle delegation token renewal
         renewer = jobUserUGI.getShortUserName
         logDebug(s"Renewer is: $renewer")
         credentials = new Credentials(originalCredentials)
-        dfs.addDelegationTokens(renewer, credentials)
+        hadoopUGI.dfsAddDelegationToken(hadoopConf, renewer, credentials)
         // This is difficult to Mock and will require refactoring
         tokens = credentials.getAllTokens.asScala
         logDebug(s"Tokens: ${credentials.toString}")
