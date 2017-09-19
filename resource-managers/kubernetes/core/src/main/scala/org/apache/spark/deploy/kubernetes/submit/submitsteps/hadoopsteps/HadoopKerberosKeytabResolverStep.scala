@@ -20,15 +20,12 @@ import java.io._
 import java.security.PrivilegedExceptionAction
 
 import scala.collection.JavaConverters._
-import scala.util.Try
 
 import io.fabric8.kubernetes.api.model.SecretBuilder
 import org.apache.commons.codec.binary.Base64
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
-import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -52,6 +49,7 @@ private[spark] class HadoopKerberosKeytabResolverStep(
   submissionSparkConf: SparkConf,
   maybePrincipal: Option[String],
   maybeKeytab: Option[File],
+  maybeRenewerPrincipal: Option[String],
   hadoopUGI: HadoopUGIUtil) extends HadoopConfigurationStep with Logging{
     private var originalCredentials: Credentials = _
     private var dfs : FileSystem = _
@@ -62,7 +60,7 @@ private[spark] class HadoopKerberosKeytabResolverStep(
     override def configureContainers(hadoopConfigSpec: HadoopConfigSpec): HadoopConfigSpec = {
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(submissionSparkConf)
     logDebug(s"Hadoop Configuration: ${hadoopConf.toString}")
-    if (hadoopUGI.isSecurityEnabled) logError("Hadoop not configuration with Kerberos")
+    if (hadoopUGI.isSecurityEnabled) logDebug("Hadoop not configured with Kerberos")
     val maybeJobUserUGI =
       for {
         principal <- maybePrincipal
@@ -87,37 +85,35 @@ private[spark] class HadoopKerberosKeytabResolverStep(
         logDebug(s"Original tokens: ${originalCredentials.toString}")
         logDebug(s"All tokens: ${originalCredentials.getAllTokens}")
         logDebug(s"All secret keys: ${originalCredentials.getAllSecretKeys}")
-        dfs = FileSystem.get(hadoopConf)
-        // This is not necessary with [Spark-20328] since we would be using
+        // TODO: This is not necessary with [Spark-20328] since we would be using
         // Spark core providers to handle delegation token renewal
-        renewer = jobUserUGI.getShortUserName
+        renewer = maybeRenewerPrincipal.getOrElse(jobUserUGI.getShortUserName)
         logDebug(s"Renewer is: $renewer")
         credentials = new Credentials(originalCredentials)
-        dfs.addDelegationTokens(renewer, credentials)
-        // This is difficult to Mock and will require refactoring
+        hadoopUGI.dfsAddDelegationToken(hadoopConf, renewer, credentials)
         tokens = credentials.getAllTokens.asScala
         logDebug(s"Tokens: ${credentials.toString}")
         logDebug(s"All tokens: ${tokens.mkString(",")}")
         logDebug(s"All secret keys: ${credentials.getAllSecretKeys}")
         null
       }})
-    credentials.getAllTokens.asScala.isEmpty
-    tokens.isEmpty
-    if (tokens.isEmpty) logError("Did not obtain any Delegation Tokens")
-    val data = serialize(credentials)
-    val renewalTime = getTokenRenewalInterval(tokens, hadoopConf).getOrElse(Long.MaxValue)
-    val currentTime: Long = System.currentTimeMillis()
-    val initialTokenDataKeyName = s"$KERBEROS_SECRET_LABEL_PREFIX-$currentTime-$renewalTime"
+    if (tokens.isEmpty) logDebug("Did not obtain any Delegation Tokens")
+    val data = hadoopUGI.serialize(credentials)
+    val renewalInterval =
+      hadoopUGI.getTokenRenewalInterval(tokens, hadoopConf).getOrElse(Long.MaxValue)
+    val currentTime: Long = hadoopUGI.getCurrentTime
+    val initialTokenDataKeyName = s"$KERBEROS_SECRET_LABEL_PREFIX-$currentTime-$renewalInterval"
+    val uniqueSecretName = s"$HADOOP_KERBEROS_SECRET_NAME.$currentTime"
     val secretDT =
       new SecretBuilder()
         .withNewMetadata()
-          .withName(HADOOP_KERBEROS_SECRET_NAME)
+          .withName(uniqueSecretName)
           .withLabels(Map("refresh-hadoop-tokens" -> "yes").asJava)
           .endMetadata()
           .addToData(initialTokenDataKeyName, Base64.encodeBase64String(data))
       .build()
     val bootstrapKerberos = new KerberosTokenConfBootstrapImpl(
-      HADOOP_KERBEROS_SECRET_NAME,
+      uniqueSecretName,
       initialTokenDataKeyName,
       jobUserUGI.getShortUserName)
     val withKerberosEnvPod = bootstrapKerberos.bootstrapMainContainerAndVolumes(
@@ -128,44 +124,11 @@ private[spark] class HadoopKerberosKeytabResolverStep(
       additionalDriverSparkConf =
         hadoopConfigSpec.additionalDriverSparkConf ++ Map(
           HADOOP_KERBEROS_CONF_ITEM_KEY -> initialTokenDataKeyName,
-          HADOOP_KERBEROS_CONF_SECRET -> HADOOP_KERBEROS_SECRET_NAME),
+          HADOOP_KERBEROS_CONF_SECRET -> uniqueSecretName),
       driverPod = withKerberosEnvPod.pod,
       driverContainer = withKerberosEnvPod.mainContainer,
       dtSecret = Some(secretDT),
-      dtSecretName = HADOOP_KERBEROS_SECRET_NAME,
+      dtSecretName = uniqueSecretName,
       dtSecretItemKey = initialTokenDataKeyName)
-  }
-
-  // Functions that should be in Core with Rebase to 2.3
-  @deprecated("Moved to core in 2.2", "2.2")
-  private def getTokenRenewalInterval(
-    renewedTokens: Iterable[Token[_ <: TokenIdentifier]],
-    hadoopConf: Configuration): Option[Long] = {
-      val renewIntervals = renewedTokens.filter {
-        _.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier]}
-        .flatMap { token =>
-        Try {
-          val newExpiration = token.renew(hadoopConf)
-          val identifier = token.decodeIdentifier().asInstanceOf[AbstractDelegationTokenIdentifier]
-          val interval = newExpiration - identifier.getIssueDate
-          logInfo(s"Renewal interval is $interval for token ${token.getKind.toString}")
-          interval
-        }.toOption}
-      if (renewIntervals.isEmpty) None else Some(renewIntervals.min)
-  }
-
-  @deprecated("Moved to core in 2.2", "2.2")
-  private def serialize(creds: Credentials): Array[Byte] = {
-    val byteStream = new ByteArrayOutputStream
-    val dataStream = new DataOutputStream(byteStream)
-    creds.writeTokenStorageToStream(dataStream)
-    byteStream.toByteArray
-  }
-
-  @deprecated("Moved to core in 2.2", "2.2")
-  private def deserialize(tokenBytes: Array[Byte]): Credentials = {
-    val creds = new Credentials()
-    creds.readTokenStorageStream(new DataInputStream(new ByteArrayInputStream(tokenBytes)))
-    creds
   }
 }

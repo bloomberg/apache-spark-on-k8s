@@ -38,6 +38,8 @@ private[spark] class HadoopStepsOrchestrator(
    private val maybeExistingSecret = submissionSparkConf.get(KUBERNETES_KERBEROS_DT_SECRET_NAME)
    private val maybeExistingSecretItemKey =
      submissionSparkConf.get(KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY)
+   private val maybeRenewerPrincipal =
+     submissionSparkConf.get(KUBERNETES_KERBEROS_RENEWER_PRINCIPAL)
    private val hadoopConfigurationFiles = getHadoopConfFiles(hadoopConfDir)
    private val hadoopUGI = new HadoopUGIUtil
    logInfo(s"Hadoop Conf directory: $hadoopConfDir")
@@ -74,14 +76,15 @@ private[spark] class HadoopStepsOrchestrator(
       hadoopConfDir)
     val maybeKerberosStep =
       if (isKerberosEnabled) {
-        maybeExistingSecret.map(secretItemKey => Some(new HadoopKerberosSecretResolverStep(
+        maybeExistingSecret.map(existingSecretName => Some(new HadoopKerberosSecretResolverStep(
          submissionSparkConf,
-          secretItemKey,
+          existingSecretName,
           maybeExistingSecretItemKey.get))).getOrElse(Some(
             new HadoopKerberosKeytabResolverStep(
               submissionSparkConf,
               maybePrincipal,
               maybeKeytab,
+              maybeRenewerPrincipal,
               hadoopUGI)))
       } else {
         Option.empty[HadoopConfigurationStep]

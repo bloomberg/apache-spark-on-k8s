@@ -137,7 +137,6 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
         System.getProperty("spark.docker.test.driverImage", "spark-driver-py:latest"))
       .set(EXECUTOR_DOCKER_IMAGE,
         System.getProperty("spark.docker.test.executorImage", "spark-executor-py:latest"))
-      .set(KERBEROS_CONF, "simple")
 
     runPySparkPiAndVerifyCompletion(
       PYSPARK_PI_SUBMITTER_LOCAL_FILE_LOCATION,
@@ -154,7 +153,6 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       System.getProperty("spark.docker.test.driverImage", "spark-driver-py:latest"))
       .set(EXECUTOR_DOCKER_IMAGE,
       System.getProperty("spark.docker.test.executorImage", "spark-executor-py:latest"))
-      .set(KERBEROS_CONF, "simple")
 
     runPySparkPiAndVerifyCompletion(PYSPARK_PI_CONTAINER_LOCAL_FILE_LOCATION, Seq.empty[String])
   }

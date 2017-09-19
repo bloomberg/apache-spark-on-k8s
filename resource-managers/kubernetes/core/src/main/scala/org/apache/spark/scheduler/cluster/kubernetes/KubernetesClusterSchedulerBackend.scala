@@ -50,7 +50,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     val sc: SparkContext,
     executorInitContainerBootstrap: Option[SparkPodInitContainerBootstrap],
     executorHadoopBootStrap: Option[HadoopConfBootstrap],
-    executorKerberosBootStrap: Option[KerberosTokenBootstrapConf],
+    executorKerberosBootStrap: Option[KerberosTokenConfBootstrap],
     executorMountInitContainerSecretPlugin: Option[InitContainerResourceStagingServerSecretPlugin],
     mountSmallFilesBootstrap: Option[MountSmallFilesBootstrap],
     kubernetesClient: KubernetesClient)

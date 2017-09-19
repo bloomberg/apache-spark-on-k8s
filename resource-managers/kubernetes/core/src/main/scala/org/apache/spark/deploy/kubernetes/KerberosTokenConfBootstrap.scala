@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
   * This is separated out from the HadoopConf steps API because this component can be reused to
   * mounted the DT secret for executors as well.
   */
-private[spark] trait KerberosTokenBootstrapConf {
+private[spark] trait KerberosTokenConfBootstrap {
   // Bootstraps a main container with the Secret mounted as volumes and an ENV variable
   // pointing to the mounted file containing the DT for Secure HDFS interaction
   def bootstrapMainContainerAndVolumes(
@@ -37,7 +37,7 @@ private[spark] trait KerberosTokenBootstrapConf {
 private[spark] class KerberosTokenConfBootstrapImpl(
   secretName: String,
   secretItemKey: String,
-  userName: String) extends KerberosTokenBootstrapConf with Logging{
+  userName: String) extends KerberosTokenConfBootstrap with Logging{
 
 
   override def bootstrapMainContainerAndVolumes(

@@ -562,6 +562,13 @@ package object config extends Logging {
       .stringConf
       .createOptional
 
+  private[spark] val KUBERNETES_KERBEROS_RENEWER_PRINCIPAL =
+    ConfigBuilder("spark.kubernetes.kerberos.rewnewer.principal")
+      .doc("Specify the principal" +
+        " you wish to renew and retrieve your Kerberos values with")
+      .stringConf
+      .createOptional
+
   private[spark] val KUBERNETES_KERBEROS_DT_SECRET_NAME =
     ConfigBuilder("spark.kubernetes.kerberos.tokensecret.name")
       .doc("Specify the name of the secret where " +
