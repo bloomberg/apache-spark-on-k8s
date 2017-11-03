@@ -50,7 +50,7 @@ private[spark] class HadoopKerberosKeytabResolverStep(
   maybePrincipal: Option[String],
   maybeKeytab: Option[File],
   maybeRenewerPrincipal: Option[String],
-  hadoopUGI: HadoopUGIUtil) extends HadoopConfigurationStep with Logging{
+  hadoopUGI: HadoopUGIUtil) extends HadoopConfigurationStep with Logging {
     private var originalCredentials: Credentials = _
     private var dfs : FileSystem = _
     private var renewer: String = _
@@ -59,7 +59,7 @@ private[spark] class HadoopKerberosKeytabResolverStep(
 
     override def configureContainers(hadoopConfigSpec: HadoopConfigSpec): HadoopConfigSpec = {
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(submissionSparkConf)
-      if (hadoopUGI.isSecurityEnabled) logDebug("Hadoop not configured with Kerberos")
+      if (!hadoopUGI.isSecurityEnabled) logDebug("Hadoop not configured with Kerberos")
       val maybeJobUserUGI =
         for {
           principal <- maybePrincipal

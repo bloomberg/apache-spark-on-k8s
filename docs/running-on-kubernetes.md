@@ -784,7 +784,7 @@ from the other deployment modes. See the [configuration page](configuration.html
   <td>(none)</td>
   <td>
     Assuming you have set <code>spark.kubernetes.kerberos.enabled</code> to be true. This will let you specify 
-    the principal that you wish to use to handle renewing of Delegation Tokens. This is optional as you 
+    the principal that you wish to use to handle renewing of Delegation Tokens. This is optional as 
     we will set the principal to be the job users principal by default.
   </td>
 </tr>

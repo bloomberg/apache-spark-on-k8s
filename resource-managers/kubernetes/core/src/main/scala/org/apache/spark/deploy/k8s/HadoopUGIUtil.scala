@@ -67,6 +67,7 @@ private[spark] class HadoopUGIUtil{
     val byteStream = new ByteArrayOutputStream
     val dataStream = new DataOutputStream(byteStream)
     creds.writeTokenStorageToStream(dataStream)
+    dataStream.close()
     byteStream.toByteArray
   }
 

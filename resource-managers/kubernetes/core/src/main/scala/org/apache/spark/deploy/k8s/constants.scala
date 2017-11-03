@@ -81,7 +81,6 @@ package object constants {
   private[spark] val ENV_SPARK_USER = "SPARK_USER"
 
   // Bootstrapping dependencies with the init-container
-  private[spark] val INIT_CONTAINER_ANNOTATION = "pod.beta.kubernetes.io/init-containers"
   private[spark] val INIT_CONTAINER_SECRET_VOLUME_MOUNT_PATH =
     "/mnt/secrets/spark-init"
   private[spark] val INIT_CONTAINER_SUBMITTED_JARS_SECRET_KEY =
@@ -107,7 +106,7 @@ package object constants {
   private[spark] val ENV_HADOOP_CONF_DIR = "HADOOP_CONF_DIR"
   private[spark] val HADOOP_CONF_DIR_LOC = "spark.kubernetes.hadoop.conf.dir"
   private[spark] val HADOOP_CONFIG_MAP_SPARK_CONF_NAME =
-    "spark.kubernetes.hadoop.executor.hadoopconfigmapname"
+    "spark.kubernetes.hadoop.executor.hadoopConfigMapName"
 
   // Kerberos Configuration
   private[spark] val HADOOP_KERBEROS_SECRET_NAME =
