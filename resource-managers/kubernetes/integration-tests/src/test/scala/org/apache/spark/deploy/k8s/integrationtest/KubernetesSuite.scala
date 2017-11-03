@@ -367,7 +367,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       mainClass = mainClass,
       driverArgs = appArgs,
       otherPyFiles = otherPyFiles)
-    Client.run(sparkConf, clientArguments)
+    Client.run(sparkConf, clientArguments, None)
     val driverPod = kubernetesTestComponents.kubernetesClient
       .pods()
       .withLabel("spark-app-locator", APP_LOCATOR_LABEL)
