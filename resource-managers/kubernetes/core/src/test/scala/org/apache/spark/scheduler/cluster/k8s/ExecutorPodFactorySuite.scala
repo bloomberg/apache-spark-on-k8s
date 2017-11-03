@@ -77,7 +77,9 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       None,
       None,
       None,
-      executorLocalDirVolumeProvider)
+      executorLocalDirVolumeProvider,
+      None,
+      None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
@@ -117,7 +119,9 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
         None,
         None,
         None,
-        executorLocalDirVolumeProvider)
+        executorLocalDirVolumeProvider,
+        None,
+        None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
@@ -138,7 +142,9 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       None,
       None,
       None,
-      executorLocalDirVolumeProvider)
+      executorLocalDirVolumeProvider,
+      None,
+      None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
@@ -172,7 +178,9 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       None,
       Some(initContainerBootstrap),
       None,
-      executorLocalDirVolumeProvider)
+      executorLocalDirVolumeProvider,
+      None,
+      None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
@@ -202,7 +210,9 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       None,
       None,
       None,
-      executorLocalDirVolumeProvider)
+      executorLocalDirVolumeProvider,
+      None,
+      None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
     assert(executor.getSpec.getVolumes.size === 1)
@@ -223,7 +233,9 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       Some(smallFiles),
       None,
       None,
-      executorLocalDirVolumeProvider)
+      executorLocalDirVolumeProvider,
+      None,
+      None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
@@ -256,7 +268,9 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
         None,
         None,
         None,
-        executorLocalDirVolumeProvider)
+        executorLocalDirVolumeProvider,
+        None,
+        None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)]("qux" -> "quux"), driverPod, Map[String, Int]())
 

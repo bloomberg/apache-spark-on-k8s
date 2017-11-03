@@ -47,7 +47,6 @@ private[spark] class ExecutorPodFactoryImpl(
     executorInitContainerBootstrap: Option[SparkPodInitContainerBootstrap],
     executorMountInitContainerSecretPlugin: Option[InitContainerResourceStagingServerSecretPlugin],
     executorLocalDirVolumeProvider: ExecutorLocalDirVolumeProvider,
-    shuffleManager: Option[KubernetesExternalShuffleManager],
     hadoopBootStrap: Option[HadoopConfBootstrap],
     kerberosBootstrap: Option[KerberosTokenConfBootstrap])
   extends ExecutorPodFactory {

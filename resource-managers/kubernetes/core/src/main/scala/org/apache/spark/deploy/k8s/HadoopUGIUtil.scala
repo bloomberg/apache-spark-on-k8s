@@ -45,7 +45,7 @@ private[spark] class HadoopUGIUtil{
   def getCurrentTime: Long = System.currentTimeMillis()
 
    // Functions that should be in Core with Rebase to 2.3
-  @deprecated("Moved to core in 2.2", "2.2")
+  @deprecated("Moved to core in 2.3", "2.3")
   def getTokenRenewalInterval(
     renewedTokens: Iterable[Token[_ <: TokenIdentifier]],
     hadoopConf: Configuration): Option[Long] = {
@@ -62,7 +62,7 @@ private[spark] class HadoopUGIUtil{
       renewIntervals.reduceLeftOption(_ min _)
   }
 
-  @deprecated("Moved to core in 2.2", "2.2")
+  @deprecated("Moved to core in 2.3", "2.3")
   def serialize(creds: Credentials): Array[Byte] = {
     val byteStream = new ByteArrayOutputStream
     val dataStream = new DataOutputStream(byteStream)
@@ -70,7 +70,7 @@ private[spark] class HadoopUGIUtil{
     byteStream.toByteArray
   }
 
-  @deprecated("Moved to core in 2.2", "2.2")
+  @deprecated("Moved to core in 2.3", "2.3")
   def deserialize(tokenBytes: Array[Byte]): Credentials = {
     val creds = new Credentials()
     creds.readTokenStorageStream(new DataInputStream(new ByteArrayInputStream(tokenBytes)))

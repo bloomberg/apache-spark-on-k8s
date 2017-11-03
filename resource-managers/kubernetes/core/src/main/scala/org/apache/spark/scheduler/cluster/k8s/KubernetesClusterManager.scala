@@ -164,7 +164,6 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         executorInitContainerBootstrap,
         executorInitContainerSecretVolumePlugin,
         executorLocalDirVolumeProvider,
-        kubernetesShuffleManager,
         hadoopBootStrap,
         kerberosBootstrap)
     val allocatorExecutor = ThreadUtils

@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.submit
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.config._
-import org.apache.spark.deploy.k8s.submit.submitsteps.{BaseDriverConfigurationStep, DependencyResolutionStep, DriverConfigurationStep, DriverKubernetesCredentialsStep, DriverServiceBootstrapStep, InitContainerBootstrapStep, LocalDirectoryMountConfigurationStep, MountSecretsStep, MountSmallLocalFilesStep, PythonStep, RStep}
+import org.apache.spark.deploy.k8s.submit.submitsteps.{BaseDriverConfigurationStep, DependencyResolutionStep, DriverConfigurationStep, DriverKubernetesCredentialsStep, DriverServiceBootstrapStep, HadoopConfigBootstrapStep, InitContainerBootstrapStep, LocalDirectoryMountConfigurationStep, MountSecretsStep, MountSmallLocalFilesStep, PythonStep, RStep}
 
 private[spark] class DriverConfigurationStepsOrchestratorSuite extends SparkFunSuite {
 
@@ -45,7 +45,8 @@ private[spark] class DriverConfigurationStepsOrchestratorSuite extends SparkFunS
         APP_NAME,
         MAIN_CLASS,
         APP_ARGS,
-        Seq.empty[String],
+        ADDITIONAL_PYTHON_FILES,
+        None,
         sparkConf)
     validateStepTypes(
         orchestrator,
@@ -69,7 +70,8 @@ private[spark] class DriverConfigurationStepsOrchestratorSuite extends SparkFunS
         APP_NAME,
         MAIN_CLASS,
         APP_ARGS,
-        Seq.empty[String],
+        ADDITIONAL_PYTHON_FILES,
+        None,
         sparkConf)
     validateStepTypes(
         orchestrator,
@@ -93,6 +95,7 @@ private[spark] class DriverConfigurationStepsOrchestratorSuite extends SparkFunS
       MAIN_CLASS,
       APP_ARGS,
       ADDITIONAL_PYTHON_FILES,
+      None,
       sparkConf)
     validateStepTypes(
         orchestrator,
@@ -116,6 +119,7 @@ private[spark] class DriverConfigurationStepsOrchestratorSuite extends SparkFunS
       MAIN_CLASS,
       APP_ARGS,
       Seq.empty[String],
+      None,
       sparkConf)
     validateStepTypes(
       orchestrator,
@@ -126,7 +130,6 @@ private[spark] class DriverConfigurationStepsOrchestratorSuite extends SparkFunS
       classOf[LocalDirectoryMountConfigurationStep],
       classOf[RStep])
   }
-
 
   test("Only local files without a resource staging server.") {
     val sparkConf = new SparkConf(false).set("spark.files", "/var/spark/file1.txt")
@@ -139,7 +142,8 @@ private[spark] class DriverConfigurationStepsOrchestratorSuite extends SparkFunS
         APP_NAME,
         MAIN_CLASS,
         APP_ARGS,
-        Seq.empty[String],
+        ADDITIONAL_PYTHON_FILES,
+        None,
         sparkConf)
     validateStepTypes(
         orchestrator,
@@ -164,7 +168,8 @@ private[spark] class DriverConfigurationStepsOrchestratorSuite extends SparkFunS
       APP_NAME,
       MAIN_CLASS,
       APP_ARGS,
-      Seq.empty[String],
+      ADDITIONAL_PYTHON_FILES,
+      None,
       sparkConf)
     validateStepTypes(
       orchestrator,
@@ -174,6 +179,31 @@ private[spark] class DriverConfigurationStepsOrchestratorSuite extends SparkFunS
       classOf[DependencyResolutionStep],
       classOf[LocalDirectoryMountConfigurationStep],
       classOf[MountSecretsStep])
+  }
+  test("Submission steps with hdfs interaction and HADOOP_CONF_DIR defined") {
+    val sparkConf = new SparkConf(false)
+    val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
+    val hadoopConf = Some("/etc/hadoop/conf")
+    val orchestrator = new DriverConfigurationStepsOrchestrator(
+      NAMESPACE,
+      APP_ID,
+      LAUNCH_TIME,
+      mainAppResource,
+      APP_NAME,
+      MAIN_CLASS,
+      APP_ARGS,
+      ADDITIONAL_PYTHON_FILES,
+      hadoopConf,
+      sparkConf)
+    val steps = orchestrator.getAllConfigurationSteps()
+    validateStepTypes(
+      orchestrator,
+      classOf[BaseDriverConfigurationStep],
+      classOf[DriverServiceBootstrapStep],
+      classOf[DriverKubernetesCredentialsStep],
+      classOf[DependencyResolutionStep],
+      classOf[LocalDirectoryMountConfigurationStep],
+      classOf[HadoopConfigBootstrapStep])
   }
 
   private def validateStepTypes(
