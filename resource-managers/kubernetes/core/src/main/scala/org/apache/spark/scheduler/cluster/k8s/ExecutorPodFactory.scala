@@ -270,8 +270,7 @@ private[spark] class ExecutorPodFactoryImpl(
     val (executorHadoopConfPod, executorHadoopConfContainer) =
       hadoopBootStrap.map { bootstrap =>
         val podWithMainContainer = bootstrap.bootstrapMainContainerAndVolumes(
-          PodWithMainContainer(executorPodWithNodeAffinity, initBootstrappedExecutorContainer)
-        )
+          PodWithMainContainer(executorPodWithNodeAffinity, initBootstrappedExecutorContainer))
         (podWithMainContainer.pod, podWithMainContainer.mainContainer)
       }.getOrElse(executorPodWithNodeAffinity, initBootstrappedExecutorContainer)
 
@@ -281,8 +280,7 @@ private[spark] class ExecutorPodFactoryImpl(
           PodWithMainContainer(executorHadoopConfPod, executorHadoopConfContainer))
         (podWithMainContainer.pod, podWithMainContainer.mainContainer)
       }.getOrElse((executorHadoopConfPod, executorHadoopConfContainer))
-    val resolvedExecutorPod = new PodBuilder(executorKerberosPod)
-    new PodBuilder(resolvedExecutorPod)
+    new PodBuilder(executorKerberosPod)
       .editSpec()
         .addToContainers(executorKerberosContainer)
         .endSpec()
