@@ -20,7 +20,8 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.ConfigurationUtils
 import org.apache.spark.deploy.k8s.config._
 import org.apache.spark.deploy.k8s.constants._
-import org.apache.spark.deploy.k8s.submit.submitsteps.{BaseDriverConfigurationStep, DependencyResolutionStep, DriverConfigurationStep, DriverKubernetesCredentialsStep, DriverServiceBootstrapStep, InitContainerBootstrapStep, MountSecretsStep, MountSmallLocalFilesStep, PythonStep, RStep}
+import org.apache.spark.deploy.k8s.submit.submitsteps.{BaseDriverConfigurationStep, DependencyResolutionStep, DriverConfigurationStep, DriverKubernetesCredentialsStep, DriverServiceBootstrapStep, HadoopConfigBootstrapStep, InitContainerBootstrapStep, MountSecretsStep, MountSmallLocalFilesStep, PythonStep, RStep}
+import org.apache.spark.deploy.k8s.submit.submitsteps.hadoopsteps.HadoopStepsOrchestrator
 import org.apache.spark.deploy.k8s.submit.submitsteps.initcontainer.InitContainerConfigurationStepsOrchestrator
 import org.apache.spark.deploy.k8s.submit.submitsteps.LocalDirectoryMountConfigurationStep
 import org.apache.spark.launcher.SparkLauncher
@@ -38,6 +39,7 @@ private[spark] class DriverConfigurationStepsOrchestrator(
     mainClass: String,
     appArgs: Array[String],
     additionalPythonFiles: Seq[String],
+    hadoopConfDir: Option[String],
     submissionSparkConf: SparkConf) {
 
   // The resource name prefix is derived from the application name, making it easy to connect the
@@ -52,6 +54,7 @@ private[spark] class DriverConfigurationStepsOrchestrator(
   private val filesDownloadPath = submissionSparkConf.get(INIT_CONTAINER_FILES_DOWNLOAD_LOCATION)
   private val dockerImagePullPolicy = submissionSparkConf.get(DOCKER_IMAGE_PULL_POLICY)
   private val initContainerConfigMapName = s"$kubernetesResourceNamePrefix-init-config"
+  private val hadoopConfigMapName = s"$kubernetesResourceNamePrefix-hadoop-config"
 
   def getAllConfigurationSteps(): Seq[DriverConfigurationStep] = {
     val additionalMainAppJar = mainAppResource match {
@@ -114,6 +117,13 @@ private[spark] class DriverConfigurationStepsOrchestrator(
     val localDirectoryMountConfigurationStep = new LocalDirectoryMountConfigurationStep(
         submissionSparkConf)
 
+    val hadoopConfigSteps =
+      hadoopConfDir.map { conf =>
+        val hadoopStepsOrchestrator =
+          new HadoopStepsOrchestrator(namespace, hadoopConfigMapName, submissionSparkConf, conf)
+        val hadoopConfSteps = hadoopStepsOrchestrator.getHadoopSteps()
+        Some(new HadoopConfigBootstrapStep(hadoopConfSteps, hadoopConfigMapName))}
+      .getOrElse(Option.empty[DriverConfigurationStep])
     val resourceStep = mainAppResource match {
       case PythonMainAppResource(mainPyResource) =>
         Option(new PythonStep(mainPyResource, additionalPythonFiles, filesDownloadPath))
@@ -196,6 +206,7 @@ private[spark] class DriverConfigurationStepsOrchestrator(
       dependencyResolutionStep,
       localDirectoryMountConfigurationStep) ++
       submittedDependenciesBootstrapSteps ++
+      hadoopConfigSteps.toSeq ++
       resourceStep.toSeq ++
       mountSecretsStep.toSeq
   }

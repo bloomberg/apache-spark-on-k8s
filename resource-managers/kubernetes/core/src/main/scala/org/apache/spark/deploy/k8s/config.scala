@@ -157,6 +157,12 @@ package object config extends Logging {
       .stringConf
       .createOptional
 
+  private[spark] val KUBERNETES_SHUFFLE_DIR =
+    ConfigBuilder("spark.kubernetes.shuffle.dir")
+      .doc("Path to the shared shuffle directories.")
+      .stringConf
+      .createOptional
+
   private[spark] val KUBERNETES_SHUFFLE_APISERVER_URI =
     ConfigBuilder("spark.kubernetes.shuffle.apiServer.url")
       .doc("URL to the Kubernetes API server that the shuffle service will monitor for Spark pods.")
@@ -495,6 +501,49 @@ package object config extends Logging {
       .createOptional
 
   private[spark] val KUBERNETES_NODE_SELECTOR_PREFIX = "spark.kubernetes.node.selector."
+
+  private[spark] val KUBERNETES_KERBEROS_SUPPORT =
+    ConfigBuilder("spark.kubernetes.kerberos.enabled")
+      .doc("Specify whether your job is a job that will require a Delegation Token to access HDFS")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val KUBERNETES_KERBEROS_KEYTAB =
+    ConfigBuilder("spark.kubernetes.kerberos.keytab")
+      .doc("Specify the location of keytab" +
+        " for Kerberos in order to access Secure HDFS")
+      .stringConf
+      .createOptional
+
+  private[spark] val KUBERNETES_KERBEROS_PRINCIPAL =
+    ConfigBuilder("spark.kubernetes.kerberos.principal")
+      .doc("Specify the principal" +
+        " for Kerberos in order to access Secure HDFS")
+      .stringConf
+      .createOptional
+
+  private[spark] val KUBERNETES_KERBEROS_RENEWER_PRINCIPAL =
+    ConfigBuilder("spark.kubernetes.kerberos.rewnewer.principal")
+      .doc("Specify the principal" +
+        " you wish to renew and retrieve your Kerberos values with")
+      .stringConf
+      .createOptional
+
+  private[spark] val KUBERNETES_KERBEROS_DT_SECRET_NAME =
+    ConfigBuilder("spark.kubernetes.kerberos.tokensecret.name")
+      .doc("Specify the name of the secret where " +
+        " your existing delegation token is stored. This removes the need" +
+        " for the job user to provide any keytab for launching a job")
+      .stringConf
+      .createOptional
+
+  private[spark] val KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY =
+    ConfigBuilder("spark.kubernetes.kerberos.tokensecret.itemkey")
+      .doc("Specify the item key of the data where " +
+        " your existing delegation token is stored. This removes the need" +
+        " for the job user to provide any keytab for launching a job")
+      .stringConf
+      .createOptional
 
   private[spark] def resolveK8sMaster(rawMasterString: String): String = {
     if (!rawMasterString.startsWith("k8s://")) {
