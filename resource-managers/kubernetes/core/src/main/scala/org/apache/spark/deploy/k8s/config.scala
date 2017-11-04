@@ -157,12 +157,6 @@ package object config extends Logging {
       .stringConf
       .createOptional
 
-  private[spark] val KUBERNETES_SHUFFLE_DIR =
-    ConfigBuilder("spark.kubernetes.shuffle.dir")
-      .doc("Path to the shared shuffle directories.")
-      .stringConf
-      .createOptional
-
   private[spark] val KUBERNETES_SHUFFLE_APISERVER_URI =
     ConfigBuilder("spark.kubernetes.shuffle.apiServer.url")
       .doc("URL to the Kubernetes API server that the shuffle service will monitor for Spark pods.")
@@ -523,7 +517,7 @@ package object config extends Logging {
       .createOptional
 
   private[spark] val KUBERNETES_KERBEROS_RENEWER_PRINCIPAL =
-    ConfigBuilder("spark.kubernetes.kerberos.rewnewer.principal")
+    ConfigBuilder("spark.kubernetes.kerberos.renewer.principal")
       .doc("Specify the principal" +
         " you wish to renew and retrieve your Kerberos values with")
       .stringConf

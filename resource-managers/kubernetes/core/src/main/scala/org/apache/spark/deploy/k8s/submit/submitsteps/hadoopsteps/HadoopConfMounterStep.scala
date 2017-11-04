@@ -18,7 +18,8 @@ package org.apache.spark.deploy.k8s.submit.submitsteps.hadoopsteps
 
 import java.io.File
 
-import org.apache.commons.io.FileUtils.readFileToString
+import com.google.common.base.Charsets
+import com.google.common.io.Files
 
 import org.apache.spark.deploy.k8s.{HadoopConfBootstrap, PodWithMainContainer}
 import org.apache.spark.deploy.k8s.constants._
@@ -48,7 +49,7 @@ private[spark] class HadoopConfMounterStep(
        driverContainer = bootstrappedPodAndMainContainer.mainContainer,
        configMapProperties =
          hadoopConfigurationFiles.map(file =>
-           (file.toPath.getFileName.toString, readFileToString(file))).toMap,
+           (file.toPath.getFileName.toString, Files.toString(file, Charsets.UTF_8))).toMap,
        additionalDriverSparkConf = hadoopConfigSpec.additionalDriverSparkConf ++
         Map(HADOOP_CONF_DIR_LOC -> hadoopConfDir)
      )

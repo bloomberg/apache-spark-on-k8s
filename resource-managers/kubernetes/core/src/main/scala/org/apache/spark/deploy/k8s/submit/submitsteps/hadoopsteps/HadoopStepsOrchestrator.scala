@@ -27,10 +27,11 @@ import org.apache.spark.internal.Logging
   * Returns the complete ordered list of steps required to configure the hadoop configurations.
   */
 private[spark] class HadoopStepsOrchestrator(
+  kubernetesResourceNamePrefix: String,
   namespace: String,
   hadoopConfigMapName: String,
   submissionSparkConf: SparkConf,
-  hadoopConfDir: String) extends Logging{
+  hadoopConfDir: String) extends Logging {
    private val isKerberosEnabled = submissionSparkConf.get(KUBERNETES_KERBEROS_SUPPORT)
    private val maybePrincipal = submissionSparkConf.get(KUBERNETES_KERBEROS_PRINCIPAL)
    private val maybeKeytab = submissionSparkConf.get(KUBERNETES_KERBEROS_KEYTAB)
@@ -81,6 +82,7 @@ private[spark] class HadoopStepsOrchestrator(
           existingSecretName,
           maybeExistingSecretItemKey.get))).getOrElse(Some(
             new HadoopKerberosKeytabResolverStep(
+              kubernetesResourceNamePrefix,
               submissionSparkConf,
               maybePrincipal,
               maybeKeytab,

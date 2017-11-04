@@ -39,12 +39,11 @@ private[spark] class KerberosTokenConfBootstrapImpl(
   secretItemKey: String,
   userName: String) extends KerberosTokenConfBootstrap with Logging{
 
-
   override def bootstrapMainContainerAndVolumes(
   originalPodWithMainContainer: PodWithMainContainer)
   : PodWithMainContainer = {
     logInfo("Mounting HDFS DT from Secret for Secure HDFS")
-    val dtMountedPod = new PodBuilder(originalPodWithMainContainer.pod)
+    val secretMountedPod = new PodBuilder(originalPodWithMainContainer.pod)
       .editOrNewSpec()
         .addNewVolume()
           .withName(SPARK_APP_HADOOP_SECRET_VOLUME_NAME)
@@ -54,7 +53,8 @@ private[spark] class KerberosTokenConfBootstrapImpl(
           .endVolume()
         .endSpec()
       .build()
-    val mainContainerWithMountedKerberos = new ContainerBuilder(
+    // TODO: ENV_HADOOP_TOKEN_FILE_LOCATION should point to the latest token data item key.
+    val secretMountedContainer = new ContainerBuilder(
       originalPodWithMainContainer.mainContainer)
       .addNewVolumeMount()
         .withName(SPARK_APP_HADOOP_SECRET_VOLUME_NAME)
@@ -70,7 +70,7 @@ private[spark] class KerberosTokenConfBootstrapImpl(
         .endEnv()
       .build()
     originalPodWithMainContainer.copy(
-      pod = dtMountedPod,
-      mainContainer = mainContainerWithMountedKerberos)
+      pod = secretMountedPod,
+      mainContainer = secretMountedContainer)
   }
 }

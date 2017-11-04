@@ -120,6 +120,11 @@ package object constants {
   private[spark] val SPARK_HADOOP_PREFIX = "spark.hadoop."
   private[spark] val HADOOP_SECURITY_AUTHENTICATION =
     SPARK_HADOOP_PREFIX + "hadoop.security.authentication"
+
+  // Kerberos Token-Refresh Server
+  private[spark] val KERBEROS_REFRESH_LABEL_KEY = "refresh-hadoop-tokens"
+  private[spark] val KERBEROS_REFRESH_LABEL_VALUE = "yes"
+
   // Bootstrapping dependencies via a secret
   private[spark] val MOUNTED_SMALL_FILES_SECRET_MOUNT_PATH = "/etc/spark-submitted-files"
 

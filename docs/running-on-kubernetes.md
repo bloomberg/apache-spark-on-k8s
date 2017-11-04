@@ -780,7 +780,7 @@ from the other deployment modes. See the [configuration page](configuration.html
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.kerberos.rewewer.principal</code></td> 
+  <td><code>spark.kubernetes.kerberos.renewer.principal</code></td> 
   <td>(none)</td>
   <td>
     Assuming you have set <code>spark.kubernetes.kerberos.enabled</code> to be true. This will let you specify 

@@ -46,6 +46,7 @@ import org.apache.spark.internal.Logging
   * DriverSpec.
   */
 private[spark] class HadoopKerberosKeytabResolverStep(
+  kubernetesResourceNamePrefix: String,
   submissionSparkConf: SparkConf,
   maybePrincipal: Option[String],
   maybeKeytab: Option[File],
@@ -94,12 +95,13 @@ private[spark] class HadoopKerberosKeytabResolverStep(
         hadoopUGI.getTokenRenewalInterval(tokens, hadoopConf).getOrElse(Long.MaxValue)
       val currentTime: Long = hadoopUGI.getCurrentTime
       val initialTokenDataKeyName = s"$KERBEROS_SECRET_LABEL_PREFIX-$currentTime-$renewalInterval"
-      val uniqueSecretName = s"$HADOOP_KERBEROS_SECRET_NAME.$currentTime"
+      val uniqueSecretName =
+        s"$kubernetesResourceNamePrefix-$HADOOP_KERBEROS_SECRET_NAME.$currentTime"
       val secretDT =
         new SecretBuilder()
           .withNewMetadata()
             .withName(uniqueSecretName)
-            .withLabels(Map("refresh-hadoop-tokens" -> "yes").asJava)
+            .withLabels(Map(KERBEROS_REFRESH_LABEL_KEY -> KERBEROS_REFRESH_LABEL_VALUE).asJava)
             .endMetadata()
             .addToData(initialTokenDataKeyName, Base64.encodeBase64String(data))
         .build()

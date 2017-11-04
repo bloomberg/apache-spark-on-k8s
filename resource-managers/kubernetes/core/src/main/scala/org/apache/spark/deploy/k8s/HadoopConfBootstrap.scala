@@ -47,12 +47,13 @@ private[spark] class HadoopConfBootstrapImpl(
   override def bootstrapMainContainerAndVolumes(
     originalPodWithMainContainer: PodWithMainContainer)
     : PodWithMainContainer = {
-    logInfo("HADOOP_CONF_DIR defined. Mounting HDFS specific .xml files")
-    val keyPaths = hadoopConfigFiles.map(file =>
+    logInfo("HADOOP_CONF_DIR defined. Mounting Hadoop specific .xml files")
+    val keyPaths = hadoopConfigFiles.map{ file =>
+      val fileStringPath = file.toPath.getFileName.toString
       new KeyToPathBuilder()
-        .withKey(file.toPath.getFileName.toString)
-        .withPath(file.toPath.getFileName.toString)
-      .build())
+        .withKey(fileStringPath)
+        .withPath(fileStringPath)
+      .build() }
     val hadoopSupportedPod = new PodBuilder(originalPodWithMainContainer.pod)
       .editSpec()
         .addNewVolume()
@@ -64,7 +65,7 @@ private[spark] class HadoopConfBootstrapImpl(
           .endVolume()
         .endSpec()
       .build()
-    val mainContainerWithMountedHadoopConf = new ContainerBuilder(
+    val hadoopSupportedContainer = new ContainerBuilder(
       originalPodWithMainContainer.mainContainer)
       .addNewVolumeMount()
         .withName(HADOOP_FILE_VOLUME)
@@ -81,6 +82,6 @@ private[spark] class HadoopConfBootstrapImpl(
       .build()
     originalPodWithMainContainer.copy(
       pod = hadoopSupportedPod,
-      mainContainer = mainContainerWithMountedHadoopConf)
+      mainContainer = hadoopSupportedContainer)
   }
 }

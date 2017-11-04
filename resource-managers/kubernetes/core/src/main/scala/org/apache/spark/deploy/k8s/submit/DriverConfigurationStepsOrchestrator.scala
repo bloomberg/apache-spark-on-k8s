@@ -120,7 +120,12 @@ private[spark] class DriverConfigurationStepsOrchestrator(
     val hadoopConfigSteps =
       hadoopConfDir.map { conf =>
         val hadoopStepsOrchestrator =
-          new HadoopStepsOrchestrator(namespace, hadoopConfigMapName, submissionSparkConf, conf)
+          new HadoopStepsOrchestrator(
+            kubernetesResourceNamePrefix,
+            namespace,
+            hadoopConfigMapName,
+            submissionSparkConf,
+            conf)
         val hadoopConfSteps = hadoopStepsOrchestrator.getHadoopSteps()
         Some(new HadoopConfigBootstrapStep(hadoopConfSteps, hadoopConfigMapName))}
       .getOrElse(Option.empty[DriverConfigurationStep])
