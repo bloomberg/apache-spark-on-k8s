@@ -37,7 +37,7 @@ private[spark] trait KerberosTokenConfBootstrap {
 private[spark] class KerberosTokenConfBootstrapImpl(
   secretName: String,
   secretItemKey: String,
-  userName: String) extends KerberosTokenConfBootstrap with Logging{
+  userName: String) extends KerberosTokenConfBootstrap with Logging {
 
   override def bootstrapMainContainerAndVolumes(
   originalPodWithMainContainer: PodWithMainContainer)

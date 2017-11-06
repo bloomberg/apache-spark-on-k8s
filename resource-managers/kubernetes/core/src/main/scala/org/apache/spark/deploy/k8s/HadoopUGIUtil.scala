@@ -74,7 +74,9 @@ private[spark] class HadoopUGIUtil{
   @deprecated("Moved to core in 2.3", "2.3")
   def deserialize(tokenBytes: Array[Byte]): Credentials = {
     val creds = new Credentials()
-    creds.readTokenStorageStream(new DataInputStream(new ByteArrayInputStream(tokenBytes)))
+    val dataStream = new DataInputStream(new ByteArrayInputStream(tokenBytes))
+    creds.readTokenStorageStream(dataStream)
+    dataStream.close()
     creds
   }
 }

@@ -53,13 +53,13 @@ private[spark] class HadoopConfigBootstrapStep(
           .endMetadata()
         .addToData(currentHadoopSpec.configMapProperties.asJava)
       .build()
-    val executorSparkConf = driverSpec.driverSparkConf.clone()
+    val driverSparkConfWithExecutorSetup = driverSpec.driverSparkConf.clone()
       .set(HADOOP_CONFIG_MAP_SPARK_CONF_NAME, hadoopConfigMapName)
       .setAll(currentHadoopSpec.additionalDriverSparkConf)
     driverSpec.copy(
       driverPod = currentHadoopSpec.driverPod,
       driverContainer = currentHadoopSpec.driverContainer,
-      driverSparkConf = executorSparkConf,
+      driverSparkConf = driverSparkConfWithExecutorSetup,
       otherKubernetesResources =
         driverSpec.otherKubernetesResources ++
         Seq(configMap) ++ currentHadoopSpec.dtSecret.toSeq
