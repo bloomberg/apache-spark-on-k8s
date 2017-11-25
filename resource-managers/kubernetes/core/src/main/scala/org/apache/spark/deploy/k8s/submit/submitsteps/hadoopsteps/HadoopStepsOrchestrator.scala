@@ -19,7 +19,7 @@ package org.apache.spark.deploy.k8s.submit.submitsteps.hadoopsteps
 import java.io.File
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.k8s.{HadoopConfBootstrapImpl, HadoopUGIUtil, OptionRequirements}
+import org.apache.spark.deploy.k8s.{HadoopConfBootstrapImpl, HadoopUGIUtilImpl, OptionRequirements}
 import org.apache.spark.deploy.k8s.config._
 import org.apache.spark.internal.Logging
 
@@ -27,11 +27,12 @@ import org.apache.spark.internal.Logging
   * Returns the complete ordered list of steps required to configure the hadoop configurations.
   */
 private[spark] class HadoopStepsOrchestrator(
-  kubernetesResourceNamePrefix: String,
-  namespace: String,
-  hadoopConfigMapName: String,
-  submissionSparkConf: SparkConf,
-  hadoopConfDir: String) extends Logging {
+   kubernetesResourceNamePrefix: String,
+   namespace: String,
+   hadoopConfigMapName: String,
+   submissionSparkConf: SparkConf,
+   hadoopConfDir: String) extends Logging {
+
    private val isKerberosEnabled = submissionSparkConf.get(KUBERNETES_KERBEROS_SUPPORT)
    private val maybePrincipal = submissionSparkConf.get(KUBERNETES_KERBEROS_PRINCIPAL)
    private val maybeKeytab = submissionSparkConf.get(KUBERNETES_KERBEROS_KEYTAB)
@@ -42,7 +43,7 @@ private[spark] class HadoopStepsOrchestrator(
    private val maybeRenewerPrincipal =
      submissionSparkConf.get(KUBERNETES_KERBEROS_RENEWER_PRINCIPAL)
    private val hadoopConfigurationFiles = getHadoopConfFiles(hadoopConfDir)
-   private val hadoopUGI = new HadoopUGIUtil
+   private val hadoopUGI = new HadoopUGIUtilImpl
    logInfo(s"Hadoop Conf directory: $hadoopConfDir")
 
    require(maybeKeytab.forall( _ => isKerberosEnabled ),
@@ -95,10 +96,9 @@ private[spark] class HadoopStepsOrchestrator(
   }
 
   private def getHadoopConfFiles(path: String) : Seq[File] = {
-     def isFile(file: File) = if (file.isFile) Some(file) else None
      val dir = new File(path)
      if (dir.isDirectory) {
-        dir.listFiles.flatMap { file => isFile(file) }.toSeq
+        dir.listFiles.flatMap { file => Some(file).filter(_.isFile) }.toSeq
      } else {
        Seq.empty[File]
      }

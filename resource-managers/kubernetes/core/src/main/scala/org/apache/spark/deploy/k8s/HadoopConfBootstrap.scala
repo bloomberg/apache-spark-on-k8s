@@ -44,8 +44,7 @@ private[spark] class HadoopConfBootstrapImpl(
   hadoopConfigFiles: Seq[File],
   hadoopUGI: HadoopUGIUtil) extends HadoopConfBootstrap with Logging {
 
-  override def bootstrapMainContainerAndVolumes(
-    originalPodWithMainContainer: PodWithMainContainer)
+  override def bootstrapMainContainerAndVolumes(originalPodWithMainContainer: PodWithMainContainer)
     : PodWithMainContainer = {
     logInfo("HADOOP_CONF_DIR defined. Mounting Hadoop specific .xml files")
     val keyPaths = hadoopConfigFiles.map{ file =>
@@ -77,7 +76,7 @@ private[spark] class HadoopConfBootstrapImpl(
         .endEnv()
       .addNewEnv()
         .withName(ENV_SPARK_USER)
-        .withValue(hadoopUGI.getShortName)
+        .withValue(hadoopUGI.getShortUserName)
         .endEnv()
       .build()
     originalPodWithMainContainer.copy(

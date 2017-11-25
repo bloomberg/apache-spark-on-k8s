@@ -28,6 +28,7 @@ import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.{HadoopUGIUtil, KerberosTokenConfBootstrapImpl, PodWithMainContainer}
 import org.apache.spark.deploy.k8s.constants._
@@ -46,12 +47,13 @@ import org.apache.spark.internal.Logging
   * DriverSpec.
   */
 private[spark] class HadoopKerberosKeytabResolverStep(
-  kubernetesResourceNamePrefix: String,
-  submissionSparkConf: SparkConf,
-  maybePrincipal: Option[String],
-  maybeKeytab: Option[File],
-  maybeRenewerPrincipal: Option[String],
-  hadoopUGI: HadoopUGIUtil) extends HadoopConfigurationStep with Logging {
+    kubernetesResourceNamePrefix: String,
+    submissionSparkConf: SparkConf,
+    maybePrincipal: Option[String],
+    maybeKeytab: Option[File],
+    maybeRenewerPrincipal: Option[String],
+    hadoopUGI: HadoopUGIUtil) extends HadoopConfigurationStep with Logging {
+
     private var originalCredentials: Credentials = _
     private var dfs : FileSystem = _
     private var renewer: String = _
@@ -60,7 +62,8 @@ private[spark] class HadoopKerberosKeytabResolverStep(
 
     override def configureContainers(hadoopConfigSpec: HadoopConfigSpec): HadoopConfigSpec = {
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(submissionSparkConf)
-      if (!hadoopUGI.isSecurityEnabled) logDebug("Hadoop not configured with Kerberos")
+      if (!hadoopUGI.isSecurityEnabled) {
+        throw new SparkException("Hadoop not configured with Kerberos") }
       val maybeJobUserUGI =
         for {
           principal <- maybePrincipal
@@ -89,11 +92,12 @@ private[spark] class HadoopKerberosKeytabResolverStep(
           tokens = credentials.getAllTokens.asScala
           null
         }})
-      if (tokens.isEmpty) logDebug("Did not obtain any Delegation Tokens")
+      // TODO: Figure out how to MOCK this properly so exception can be thrown
+      // if (tokens.isEmpty) throw new SparkException(s"${credentials.getAllTokens.asScala}")
       val data = hadoopUGI.serialize(credentials)
       val renewalInterval =
         hadoopUGI.getTokenRenewalInterval(tokens, hadoopConf).getOrElse(Long.MaxValue)
-      val currentTime: Long = hadoopUGI.getCurrentTime
+      val currentTime = hadoopUGI.getCurrentTime
       val initialTokenDataKeyName = s"$KERBEROS_SECRET_LABEL_PREFIX-$currentTime-$renewalInterval"
       val uniqueSecretName =
         s"$kubernetesResourceNamePrefix-$HADOOP_KERBEROS_SECRET_NAME.$currentTime"

@@ -58,6 +58,8 @@ private[spark] class ExecutorPodFactoryImpl(
   private val executorJarsDownloadDir = sparkConf.get(INIT_CONTAINER_JARS_DOWNLOAD_LOCATION)
 
   private val isKerberosEnabled = sparkConf.get(KUBERNETES_KERBEROS_SUPPORT)
+  // HADOOP_SECURITY_AUTHENTICATION is defined as simple for the driver and executors as
+  // they need only the delegation token to access secure HDFS, no need to sign in to Kerberos
   private val maybeSimpleAuthentication =
     if (isKerberosEnabled) Some(s"-D$HADOOP_SECURITY_AUTHENTICATION=simple") else None
   private val executorLabels = ConfigurationUtils.parsePrefixedKeyValuePairs(

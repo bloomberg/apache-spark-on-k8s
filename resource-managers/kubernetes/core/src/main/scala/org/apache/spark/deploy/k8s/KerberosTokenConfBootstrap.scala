@@ -29,48 +29,46 @@ import org.apache.spark.internal.Logging
 private[spark] trait KerberosTokenConfBootstrap {
   // Bootstraps a main container with the Secret mounted as volumes and an ENV variable
   // pointing to the mounted file containing the DT for Secure HDFS interaction
-  def bootstrapMainContainerAndVolumes(
-  originalPodWithMainContainer: PodWithMainContainer)
-  : PodWithMainContainer
+  def bootstrapMainContainerAndVolumes(originalPodWithMainContainer: PodWithMainContainer)
+    : PodWithMainContainer
 }
 
 private[spark] class KerberosTokenConfBootstrapImpl(
-  secretName: String,
-  secretItemKey: String,
-  userName: String) extends KerberosTokenConfBootstrap with Logging {
+    secretName: String,
+    secretItemKey: String,
+    userName: String) extends KerberosTokenConfBootstrap with Logging {
 
-  override def bootstrapMainContainerAndVolumes(
-  originalPodWithMainContainer: PodWithMainContainer)
-  : PodWithMainContainer = {
-    logInfo("Mounting HDFS DT from Secret for Secure HDFS")
-    val secretMountedPod = new PodBuilder(originalPodWithMainContainer.pod)
-      .editOrNewSpec()
-        .addNewVolume()
+    override def bootstrapMainContainerAndVolumes(
+      originalPodWithMainContainer: PodWithMainContainer) : PodWithMainContainer = {
+      logInfo("Mounting HDFS DT from Secret for Secure HDFS")
+      val secretMountedPod = new PodBuilder(originalPodWithMainContainer.pod)
+        .editOrNewSpec()
+          .addNewVolume()
+            .withName(SPARK_APP_HADOOP_SECRET_VOLUME_NAME)
+            .withNewSecret()
+              .withSecretName(secretName)
+              .endSecret()
+            .endVolume()
+          .endSpec()
+        .build()
+      // TODO: ENV_HADOOP_TOKEN_FILE_LOCATION should point to the latest token data item key.
+      val secretMountedContainer = new ContainerBuilder(
+        originalPodWithMainContainer.mainContainer)
+        .addNewVolumeMount()
           .withName(SPARK_APP_HADOOP_SECRET_VOLUME_NAME)
-          .withNewSecret()
-            .withSecretName(secretName)
-            .endSecret()
-          .endVolume()
-        .endSpec()
-      .build()
-    // TODO: ENV_HADOOP_TOKEN_FILE_LOCATION should point to the latest token data item key.
-    val secretMountedContainer = new ContainerBuilder(
-      originalPodWithMainContainer.mainContainer)
-      .addNewVolumeMount()
-        .withName(SPARK_APP_HADOOP_SECRET_VOLUME_NAME)
-        .withMountPath(SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR)
-        .endVolumeMount()
-      .addNewEnv()
-        .withName(ENV_HADOOP_TOKEN_FILE_LOCATION)
-        .withValue(s"$SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR/$secretItemKey")
-        .endEnv()
-      .addNewEnv()
-        .withName(ENV_SPARK_USER)
-        .withValue(userName)
-        .endEnv()
-      .build()
-    originalPodWithMainContainer.copy(
-      pod = secretMountedPod,
-      mainContainer = secretMountedContainer)
-  }
+          .withMountPath(SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR)
+          .endVolumeMount()
+        .addNewEnv()
+          .withName(ENV_HADOOP_TOKEN_FILE_LOCATION)
+          .withValue(s"$SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR/$secretItemKey")
+          .endEnv()
+        .addNewEnv()
+          .withName(ENV_SPARK_USER)
+          .withValue(userName)
+          .endEnv()
+        .build()
+      originalPodWithMainContainer.copy(
+        pod = secretMountedPod,
+        mainContainer = secretMountedContainer)
+    }
 }

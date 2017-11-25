@@ -21,7 +21,7 @@ import java.io.File
 import io.fabric8.kubernetes.client.Config
 
 import org.apache.spark.SparkContext
-import org.apache.spark.deploy.k8s.{ConfigurationUtils, HadoopConfBootstrapImpl, HadoopUGIUtil, InitContainerResourceStagingServerSecretPluginImpl, KerberosTokenConfBootstrapImpl, SparkKubernetesClientFactory, SparkPodInitContainerBootstrapImpl}
+import org.apache.spark.deploy.k8s.{ConfigurationUtils, HadoopConfBootstrapImpl, HadoopUGIUtilImpl, InitContainerResourceStagingServerSecretPluginImpl, KerberosTokenConfBootstrapImpl, SparkKubernetesClientFactory, SparkPodInitContainerBootstrapImpl}
 import org.apache.spark.deploy.k8s.config._
 import org.apache.spark.deploy.k8s.constants._
 import org.apache.spark.deploy.k8s.submit.{MountSecretsBootstrapImpl, MountSmallFilesBootstrapImpl}
@@ -85,27 +85,26 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         configMapKey)
     }
 
-    val hadoopBootStrap = for {
-      hadoopConfigMap <- maybeHadoopConfigMap
-    } yield {
-      val hadoopUtil = new HadoopUGIUtil
+    val hadoopBootStrap = maybeHadoopConfigMap.map{ hadoopConfigMap =>
+      val hadoopUtil = new HadoopUGIUtilImpl
       val hadoopConfigurations = maybeHadoopConfDir.map(
           conf_dir => getHadoopConfFiles(conf_dir)).getOrElse(Array.empty[File])
       new HadoopConfBootstrapImpl(
         hadoopConfigMap,
         hadoopConfigurations,
-        hadoopUtil
-      )
+        hadoopUtil)
     }
-    val kerberosBootstrap = for {
-      secretName <- maybeDTSecretName
-      secretItemKey <- maybeDTDataItem
-    } yield {
-      new KerberosTokenConfBootstrapImpl(
-        secretName,
-        secretItemKey,
-        Utils.getCurrentUserName)
-    }
+    val kerberosBootstrap =
+      maybeHadoopConfigMap.flatMap { _ =>
+        for {
+        secretName <- maybeDTSecretName
+        secretItemKey <- maybeDTDataItem
+      } yield {
+        new KerberosTokenConfBootstrapImpl(
+          secretName,
+          secretItemKey,
+          Utils.getCurrentUserName() ) }
+      }
     val mountSmallFilesBootstrap = for {
       secretName <- maybeSubmittedFilesSecret
       secretMountPath <- maybeSubmittedFilesSecretMountPath
@@ -184,10 +183,9 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     scheduler.asInstanceOf[TaskSchedulerImpl].initialize(backend)
   }
   private def getHadoopConfFiles(path: String) : Array[File] = {
-    def isFile(file: File) = if (file.isFile) Some(file) else None
     val dir = new File(path)
     if (dir.isDirectory) {
-      dir.listFiles.flatMap { file => isFile(file) }
+      dir.listFiles.flatMap { file => Some(file).filter(_.isFile) }
     } else {
       Array.empty[File]
     }

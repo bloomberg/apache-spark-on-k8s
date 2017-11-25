@@ -26,12 +26,29 @@ import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
-// Function of this class is merely for mocking reasons
-private[spark] class HadoopUGIUtil{
+private[spark] trait HadoopUGIUtil {
+  def getCurrentUser: UserGroupInformation
+  def getShortUserName: String
+  def isSecurityEnabled: Boolean
+  def loginUserFromKeytabAndReturnUGI(principal: String, keytab: String) :
+    UserGroupInformation
+  def dfsAddDelegationToken(hadoopConf: Configuration, renewer: String, creds: Credentials) :
+    Iterable[Token[_ <: TokenIdentifier]]
+  def getCurrentTime: Long
+  def getTokenRenewalInterval(
+     renewedTokens: Iterable[Token[_ <: TokenIdentifier]],
+     hadoopConf: Configuration) : Option[Long]
+  def serialize(creds: Credentials): Array[Byte]
+  def deserialize(tokenBytes: Array[Byte]): Credentials
+}
+
+private[spark] class HadoopUGIUtilImpl extends HadoopUGIUtil {
+
+  private val clock: Clock = new SystemClock()
   def getCurrentUser: UserGroupInformation = UserGroupInformation.getCurrentUser
-
-  def getShortName: String = getCurrentUser.getShortUserName
+  def getShortUserName : String = getCurrentUser.getShortUserName
 
   def isSecurityEnabled: Boolean = UserGroupInformation.isSecurityEnabled
 
@@ -42,7 +59,7 @@ private[spark] class HadoopUGIUtil{
     : Iterable[Token[_ <: TokenIdentifier]] =
     FileSystem.get(hadoopConf).addDelegationTokens(renewer, creds)
 
-  def getCurrentTime: Long = System.currentTimeMillis()
+  def getCurrentTime: Long = clock.getTimeMillis()
 
    // Functions that should be in Core with Rebase to 2.3
   @deprecated("Moved to core in 2.3", "2.3")
@@ -64,19 +81,22 @@ private[spark] class HadoopUGIUtil{
 
   @deprecated("Moved to core in 2.3", "2.3")
   def serialize(creds: Credentials): Array[Byte] = {
-    val byteStream = new ByteArrayOutputStream
-    val dataStream = new DataOutputStream(byteStream)
-    creds.writeTokenStorageToStream(dataStream)
-    dataStream.close()
-    byteStream.toByteArray
+    Utils.tryWithResource(new ByteArrayOutputStream()) { byteStream =>
+      Utils.tryWithResource(new DataOutputStream(byteStream)) { dataStream =>
+        creds.writeTokenStorageToStream(dataStream)
+      }
+      byteStream.toByteArray
+    }
   }
 
   @deprecated("Moved to core in 2.3", "2.3")
   def deserialize(tokenBytes: Array[Byte]): Credentials = {
     val creds = new Credentials()
-    val dataStream = new DataInputStream(new ByteArrayInputStream(tokenBytes))
-    creds.readTokenStorageStream(dataStream)
-    dataStream.close()
+    Utils.tryWithResource(new ByteArrayInputStream(tokenBytes)) { byteStream =>
+      Utils.tryWithResource(new DataInputStream(byteStream)) { dataStream =>
+        creds.readTokenStorageStream(dataStream)
+      }
+    }
     creds
   }
 }
