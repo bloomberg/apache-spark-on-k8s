@@ -21,7 +21,7 @@ import java.io.File
 import io.fabric8.kubernetes.client.Config
 
 import org.apache.spark.SparkContext
-import org.apache.spark.deploy.k8s.{ConfigurationUtils, HadoopConfBootstrapImpl, HadoopUGIUtilImpl, InitContainerResourceStagingServerSecretPluginImpl, KerberosTokenConfBootstrapImpl, SparkKubernetesClientFactory, SparkPodInitContainerBootstrapImpl}
+import org.apache.spark.deploy.k8s.{ConfigurationUtils, HadoopConfBootstrapImpl, HadoopConfSparkUserBootstrapImpl, HadoopUGIUtilImpl, InitContainerResourceStagingServerSecretPluginImpl, KerberosTokenConfBootstrapImpl, SparkKubernetesClientFactory, SparkPodInitContainerBootstrapImpl}
 import org.apache.spark.deploy.k8s.config._
 import org.apache.spark.deploy.k8s.constants._
 import org.apache.spark.deploy.k8s.submit.{MountSecretsBootstrapImpl, MountSmallFilesBootstrapImpl}
@@ -84,9 +84,8 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         configMap,
         configMapKey)
     }
-
+    val hadoopUtil = new HadoopUGIUtilImpl
     val hadoopBootStrap = maybeHadoopConfigMap.map{ hadoopConfigMap =>
-      val hadoopUtil = new HadoopUGIUtilImpl
       val hadoopConfigurations = maybeHadoopConfDir.map(
           conf_dir => getHadoopConfFiles(conf_dir)).getOrElse(Array.empty[File])
       new HadoopConfBootstrapImpl(
@@ -104,6 +103,12 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
           secretName,
           secretItemKey,
           Utils.getCurrentUserName() ) }
+      }
+    val hadoopUserBootstrap =
+      if (hadoopBootStrap.isDefined && kerberosBootstrap.isEmpty) {
+        Some(new HadoopConfSparkUserBootstrapImpl(hadoopUtil))
+      } else {
+        None
       }
     val mountSmallFilesBootstrap = for {
       secretName <- maybeSubmittedFilesSecret
@@ -164,7 +169,8 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         executorInitContainerSecretVolumePlugin,
         executorLocalDirVolumeProvider,
         hadoopBootStrap,
-        kerberosBootstrap)
+        kerberosBootstrap,
+        hadoopUserBootstrap)
     val allocatorExecutor = ThreadUtils
         .newDaemonSingleThreadScheduledExecutor("kubernetes-pod-allocator")
     val requestExecutorsService = ThreadUtils.newDaemonCachedThreadPool(

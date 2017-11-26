@@ -74,10 +74,6 @@ private[spark] class HadoopConfBootstrapImpl(
         .withName(ENV_HADOOP_CONF_DIR)
         .withValue(HADOOP_CONF_DIR_PATH)
         .endEnv()
-      .addNewEnv()
-        .withName(ENV_SPARK_USER)
-        .withValue(hadoopUGI.getShortUserName)
-        .endEnv()
       .build()
     originalPodWithMainContainer.copy(
       pod = hadoopSupportedPod,

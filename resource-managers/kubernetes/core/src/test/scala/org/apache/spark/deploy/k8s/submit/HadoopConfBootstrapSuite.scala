@@ -77,8 +77,6 @@ private[spark] class HadoopConfBootstrapSuite extends SparkFunSuite with BeforeA
       (vm.getName, vm.getMountPath)).head === (HADOOP_FILE_VOLUME, HADOOP_CONF_DIR_PATH))
     assert(returnedPodContainer.mainContainer.getEnv.asScala.head ===
       new EnvVarBuilder().withName(ENV_HADOOP_CONF_DIR).withValue(HADOOP_CONF_DIR_PATH).build())
-    assert(returnedPodContainer.mainContainer.getEnv.asScala(1) ===
-      new EnvVarBuilder().withName(ENV_SPARK_USER).withValue(SPARK_USER_VALUE).build())
   }
 
   private def createTempFile(contents: String): File = {

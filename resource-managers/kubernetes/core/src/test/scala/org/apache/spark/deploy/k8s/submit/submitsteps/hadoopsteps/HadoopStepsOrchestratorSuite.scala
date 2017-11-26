@@ -35,8 +35,9 @@ private[spark] class HadoopStepsOrchestratorSuite extends SparkFunSuite {
       sparkTestConf,
       HADOOP_CONF_DIR_VAL)
     val steps = hadoopOrchestrator.getHadoopSteps()
-    assert(steps.length === 1)
+    assert(steps.length === 2)
     assert(steps.head.isInstanceOf[HadoopConfMounterStep])
+    assert(steps(1).isInstanceOf[HadoopConfSparkUserStep])
   }
 
   test("Testing with Keytab Kerberos Login") {

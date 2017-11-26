@@ -20,6 +20,7 @@ import java.io.File
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.{HadoopConfBootstrapImpl, HadoopUGIUtilImpl, OptionRequirements}
+import org.apache.spark.deploy.k8s.HadoopConfSparkUserBootstrapImpl
 import org.apache.spark.deploy.k8s.config._
 import org.apache.spark.internal.Logging
 
@@ -90,7 +91,7 @@ private[spark] class HadoopStepsOrchestrator(
               maybeRenewerPrincipal,
               hadoopUGI)))
       } else {
-        Option.empty[HadoopConfigurationStep]
+        Some(new HadoopConfSparkUserStep(new HadoopConfSparkUserBootstrapImpl(hadoopUGI)))
       }
     Seq(hadoopConfMounterStep) ++ maybeKerberosStep.toSeq
   }

@@ -16,19 +16,27 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import java.io.File
+import java.util.UUID
+
+import scala.collection.JavaConverters._
+
+import com.google.common.base.Charsets
+import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.{Pod, PodBuilder, VolumeBuilder, VolumeMountBuilder}
+import io.fabric8.kubernetes.api.model.KeyToPathBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.mockito.{AdditionalAnswers, Mock, Mockito, MockitoAnnotations}
 import org.mockito.Matchers.any
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach}
-import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{PodWithDetachedInitContainer, SparkPodInitContainerBootstrap}
+import org.apache.spark.deploy.k8s.{HadoopConfBootstrapImpl, HadoopConfSparkUserBootstrapImpl, HadoopUGIUtilImpl, KerberosTokenConfBootstrapImpl, PodWithDetachedInitContainer, SparkPodInitContainerBootstrap}
 import org.apache.spark.deploy.k8s.config._
 import org.apache.spark.deploy.k8s.constants._
 import org.apache.spark.deploy.k8s.submit.{MountSecretsBootstrapImpl, MountSmallFilesBootstrap, MountSmallFilesBootstrapImpl}
+import org.apache.spark.util.Utils
 
 class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterEach {
   private val driverPodName: String = "driver-pod"
@@ -56,6 +64,9 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
   @Mock
   private var executorLocalDirVolumeProvider: ExecutorLocalDirVolumeProvider = _
 
+  @Mock
+  private var hadoopUGI: HadoopUGIUtilImpl = _
+
   before {
     MockitoAnnotations.initMocks(this)
     baseConf = new SparkConf()
@@ -78,6 +89,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       None,
       None,
       executorLocalDirVolumeProvider,
+      None,
       None,
       None)
     val executor = factory.createExecutorPod(
@@ -121,6 +133,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
         None,
         executorLocalDirVolumeProvider,
         None,
+        None,
         None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
@@ -143,6 +156,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       None,
       None,
       executorLocalDirVolumeProvider,
+      None,
       None,
       None)
     val executor = factory.createExecutorPod(
@@ -180,6 +194,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       None,
       executorLocalDirVolumeProvider,
       None,
+      None,
       None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
@@ -212,6 +227,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       None,
       executorLocalDirVolumeProvider,
       None,
+      None,
       None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
@@ -224,7 +240,6 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
 
   test("Small-files add a secret & secret volume mount to the container") {
     val conf = baseConf.clone()
-
     val smallFiles = new MountSmallFilesBootstrapImpl("secret1", "/var/secret1")
     val factory = new ExecutorPodFactoryImpl(
       conf,
@@ -234,6 +249,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       None,
       None,
       executorLocalDirVolumeProvider,
+      None,
       None,
       None)
     val executor = factory.createExecutorPod(
@@ -270,6 +286,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
         None,
         executorLocalDirVolumeProvider,
         None,
+        None,
         None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)]("qux" -> "quux"), driverPod, Map[String, Int]())
@@ -282,6 +299,129 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
           "SPARK_EXECUTOR_EXTRA_CLASSPATH" -> "bar=baz",
           "qux" -> "quux"))
     checkOwnerReferences(executor, driverPodUid)
+  }
+
+  test("check that hadoop bootstrap mounts files w/o SPARK_USER") {
+    when(hadoopUGI.getShortUserName).thenReturn("test-user")
+    val conf = baseConf.clone()
+    val configName = "hadoop-test"
+    val hadoopFile = createTempFile
+    val hadoopFiles = Seq(hadoopFile)
+    val hadoopBootsrap = new HadoopConfBootstrapImpl(
+      hadoopConfConfigMapName = configName,
+      hadoopConfigFiles = hadoopFiles,
+      hadoopUGI = hadoopUGI)
+
+    val factory = new ExecutorPodFactoryImpl(
+      conf,
+      nodeAffinityExecutorPodModifier,
+      None,
+      None,
+      None,
+      None,
+      executorLocalDirVolumeProvider,
+      Some(hadoopBootsrap),
+      None,
+      None)
+    val executor = factory.createExecutorPod(
+      "1", "dummy", "dummy", Seq[(String, String)]("qux" -> "quux"), driverPod, Map[String, Int]())
+
+    checkEnv(executor,
+      Map(ENV_HADOOP_CONF_DIR -> HADOOP_CONF_DIR_PATH,
+        "qux" -> "quux"))
+    checkOwnerReferences(executor, driverPodUid)
+    checkConfigMapVolumes(executor,
+      HADOOP_FILE_VOLUME,
+      configName,
+      hadoopFile.toPath.getFileName.toString)
+    checkVolumeMounts(executor, HADOOP_FILE_VOLUME, HADOOP_CONF_DIR_PATH)
+  }
+
+  test("check that hadoop bootstrap mounts files w/ SPARK_USER") {
+    when(hadoopUGI.getShortUserName).thenReturn("test-user")
+    val conf = baseConf.clone()
+    val configName = "hadoop-test"
+    val hadoopFile = createTempFile
+    val hadoopFiles = Seq(hadoopFile)
+    val hadoopBootstrap = new HadoopConfBootstrapImpl(
+      hadoopConfConfigMapName = configName,
+      hadoopConfigFiles = hadoopFiles,
+      hadoopUGI = hadoopUGI)
+    val hadoopUserBootstrap = new HadoopConfSparkUserBootstrapImpl(hadoopUGI)
+
+    val factory = new ExecutorPodFactoryImpl(
+      conf,
+      nodeAffinityExecutorPodModifier,
+      None,
+      None,
+      None,
+      None,
+      executorLocalDirVolumeProvider,
+      Some(hadoopBootstrap),
+      None,
+      Some(hadoopUserBootstrap))
+    val executor = factory.createExecutorPod(
+      "1", "dummy", "dummy", Seq[(String, String)]("qux" -> "quux"), driverPod, Map[String, Int]())
+
+    checkEnv(executor,
+      Map(ENV_SPARK_USER -> "test-user",
+        ENV_HADOOP_CONF_DIR -> HADOOP_CONF_DIR_PATH,
+        "qux" -> "quux"))
+    checkOwnerReferences(executor, driverPodUid)
+    checkConfigMapVolumes(executor,
+      HADOOP_FILE_VOLUME,
+      configName,
+      hadoopFile.toPath.getFileName.toString)
+    checkVolumeMounts(executor, HADOOP_FILE_VOLUME, HADOOP_CONF_DIR_PATH)
+  }
+
+  test("check that hadoop and kerberos bootstrap function properly") {
+    when(hadoopUGI.getShortUserName).thenReturn("test-user")
+    val conf = baseConf.clone()
+    val configName = "hadoop-test"
+    val hadoopFile = createTempFile
+    val hadoopFiles = Seq(hadoopFile)
+    val hadoopBootstrap = new HadoopConfBootstrapImpl(
+      hadoopConfConfigMapName = configName,
+      hadoopConfigFiles = hadoopFiles,
+      hadoopUGI = hadoopUGI)
+    val secretName = "secret-test"
+    val secretItemKey = "item-test"
+    val userName = "sparkUser"
+    val kerberosBootstrap = new KerberosTokenConfBootstrapImpl(
+      secretName = secretName,
+      secretItemKey = secretItemKey,
+      userName = userName)
+    val factory = new ExecutorPodFactoryImpl(
+      conf,
+      nodeAffinityExecutorPodModifier,
+      None,
+      None,
+      None,
+      None,
+      executorLocalDirVolumeProvider,
+      Some(hadoopBootstrap),
+      Some(kerberosBootstrap),
+      None)
+    val executor = factory.createExecutorPod(
+      "1", "dummy", "dummy", Seq[(String, String)]("qux" -> "quux"), driverPod, Map[String, Int]())
+
+    checkEnv(executor,
+      Map(ENV_SPARK_USER -> userName,
+        ENV_HADOOP_CONF_DIR -> HADOOP_CONF_DIR_PATH,
+        ENV_HADOOP_TOKEN_FILE_LOCATION ->
+          s"$SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR/$secretItemKey",
+        "qux" -> "quux"))
+    checkOwnerReferences(executor, driverPodUid)
+    checkConfigMapVolumes(executor,
+      HADOOP_FILE_VOLUME,
+      configName,
+      hadoopFile.toPath.getFileName.toString)
+    checkSecretVolumes(executor, SPARK_APP_HADOOP_SECRET_VOLUME_NAME, secretName)
+    checkVolumeMounts(executor, HADOOP_FILE_VOLUME, HADOOP_CONF_DIR_PATH)
+    checkVolumeMounts(executor,
+      SPARK_APP_HADOOP_SECRET_VOLUME_NAME,
+      SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR)
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.
@@ -309,5 +449,40 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       x => (x.getName, x.getValue)
     }.toMap
     assert(defaultEnvs === mapEnvs)
+  }
+
+  private def checkVolumeMounts(executor: Pod, name: String, mountPath: String) : Unit = {
+    assert(executor.getSpec.getContainers.size() === 1)
+    val volumeMount = executor.getSpec.getContainers
+      .get(0).getVolumeMounts.asScala.find(_.getName == name)
+    assert(volumeMount.nonEmpty)
+    assert(volumeMount.get.getMountPath == mountPath)
+  }
+
+  private def checkConfigMapVolumes(executor: Pod,
+    volName: String,
+    configMapName: String,
+    content: String) : Unit = {
+    val volume = executor.getSpec.getVolumes.asScala.find(_.getName == volName)
+    assert(volume.nonEmpty)
+    assert(volume.get.getConfigMap.getName == configMapName)
+    assert(volume.get.getConfigMap.getItems.asScala.find(_.getKey == content).get ==
+      new KeyToPathBuilder()
+        .withKey(content)
+        .withPath(content).build() )
+  }
+
+  private def checkSecretVolumes(executor: Pod, volName: String, secretName: String) : Unit = {
+    val volume = executor.getSpec.getVolumes.asScala.find(_.getName == volName)
+    assert(volume.nonEmpty)
+    assert(volume.get.getSecret.getSecretName == secretName)
+  }
+
+  // Creates temp files for the purpose of testing file mounting
+  private def createTempFile: File = {
+    val dir = Utils.createTempDir()
+    val file = new File(dir, s"${UUID.randomUUID().toString}")
+    Files.write(UUID.randomUUID().toString, file, Charsets.UTF_8)
+    file
   }
 }

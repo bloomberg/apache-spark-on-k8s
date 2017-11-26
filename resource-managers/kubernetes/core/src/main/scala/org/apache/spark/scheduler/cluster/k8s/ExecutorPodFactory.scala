@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, ContainerPortBuilder, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, Pod, PodBuilder, QuantityBuilder, VolumeBuilder, VolumeMountBuilder}
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.deploy.k8s.{ConfigurationUtils, HadoopConfBootstrap, InitContainerResourceStagingServerSecretPlugin, KerberosTokenConfBootstrap, PodWithDetachedInitContainer, PodWithMainContainer, SparkPodInitContainerBootstrap}
+import org.apache.spark.deploy.k8s.{ConfigurationUtils, HadoopConfBootstrap, HadoopConfSparkUserBootstrap, InitContainerResourceStagingServerSecretPlugin, KerberosTokenConfBootstrap, PodWithDetachedInitContainer, PodWithMainContainer, SparkPodInitContainerBootstrap}
 import org.apache.spark.deploy.k8s.config._
 import org.apache.spark.deploy.k8s.constants._
 import org.apache.spark.deploy.k8s.submit.{InitContainerUtil, MountSecretsBootstrap, MountSmallFilesBootstrap}
@@ -48,7 +48,8 @@ private[spark] class ExecutorPodFactoryImpl(
     executorMountInitContainerSecretPlugin: Option[InitContainerResourceStagingServerSecretPlugin],
     executorLocalDirVolumeProvider: ExecutorLocalDirVolumeProvider,
     hadoopBootStrap: Option[HadoopConfBootstrap],
-    kerberosBootstrap: Option[KerberosTokenConfBootstrap])
+    kerberosBootstrap: Option[KerberosTokenConfBootstrap],
+    hadoopUserBootstrap: Option[HadoopConfSparkUserBootstrap])
   extends ExecutorPodFactory {
 
   import ExecutorPodFactoryImpl._
@@ -282,9 +283,17 @@ private[spark] class ExecutorPodFactoryImpl(
           PodWithMainContainer(executorHadoopConfPod, executorHadoopConfContainer))
         (podWithMainContainer.pod, podWithMainContainer.mainContainer)
       }.getOrElse((executorHadoopConfPod, executorHadoopConfContainer))
-    new PodBuilder(executorKerberosPod)
+
+    val (executorSparkUserPod, executorSparkUserContainer) =
+      hadoopUserBootstrap.map { bootstrap =>
+        val podWithMainContainer = bootstrap.bootstrapMainContainerAndVolumes(
+          PodWithMainContainer(executorKerberosPod, executorKerberosContainer))
+        (podWithMainContainer.pod, podWithMainContainer.mainContainer)
+      }.getOrElse((executorKerberosPod, executorKerberosContainer))
+
+    new PodBuilder(executorSparkUserPod)
       .editSpec()
-        .addToContainers(executorKerberosContainer)
+        .addToContainers(executorSparkUserContainer)
         .endSpec()
       .build()
   }

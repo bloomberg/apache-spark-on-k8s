@@ -16,14 +16,9 @@
  */
 package org.apache.spark.deploy.k8s.submit.submitsteps.hadoopsteps
 
-import java.io.File
-import java.util.UUID
-
 import scala.collection.JavaConverters._
 
-import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model._
-import org.apache.commons.io.FileUtils.readFileToString
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Matchers.any
 import org.mockito.Mockito.when
@@ -32,25 +27,19 @@ import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.deploy.k8s.{HadoopConfBootstrap, PodWithMainContainer}
-import org.apache.spark.deploy.k8s.constants.HADOOP_CONF_DIR_LOC
-import org.apache.spark.util.Utils
+import org.apache.spark.deploy.k8s.{HadoopConfSparkUserBootstrap, PodWithMainContainer}
 
 
-private[spark] class HadoopConfMounterStepSuite extends SparkFunSuite with BeforeAndAfter{
-  private val CONFIG_MAP_NAME = "config-map"
-  private val HADOOP_CONF_DIR_VAL = "/etc/hadoop"
+private[spark] class HadoopConfSparkUserStepSuite extends SparkFunSuite with BeforeAndAfter{
   private val POD_LABEL = Map("bootstrap" -> "true")
   private val DRIVER_CONTAINER_NAME = "driver-container"
-  private val TEMP_HADOOP_FILE = createTempFile("core-site.xml")
-  private val HADOOP_FILES = Seq(TEMP_HADOOP_FILE)
 
   @Mock
-  private var hadoopConfBootstrap : HadoopConfBootstrap = _
+  private var hadoopConfSparkUserBootstrap : HadoopConfSparkUserBootstrap = _
 
   before {
     MockitoAnnotations.initMocks(this)
-    when(hadoopConfBootstrap.bootstrapMainContainerAndVolumes(
+    when(hadoopConfSparkUserBootstrap.bootstrapMainContainerAndVolumes(
       any[PodWithMainContainer])).thenAnswer(new Answer[PodWithMainContainer] {
       override def answer(invocation: InvocationOnMock) : PodWithMainContainer = {
         val pod = invocation.getArgumentAt(0, classOf[PodWithMainContainer])
@@ -58,9 +47,9 @@ private[spark] class HadoopConfMounterStepSuite extends SparkFunSuite with Befor
           pod =
             new PodBuilder(pod.pod)
               .withNewMetadata()
-                .addToLabels("bootstrap", "true")
-                .endMetadata()
-                .withNewSpec().endSpec()
+              .addToLabels("bootstrap", "true")
+              .endMetadata()
+              .withNewSpec().endSpec()
               .build(),
           mainContainer =
             new ContainerBuilder()
@@ -69,15 +58,7 @@ private[spark] class HadoopConfMounterStepSuite extends SparkFunSuite with Befor
   }
 
   test("Test of mounting hadoop_conf_dir files into HadoopConfigSpec") {
-    val hadoopConfStep = new HadoopConfMounterStep(
-      CONFIG_MAP_NAME,
-      HADOOP_FILES,
-      hadoopConfBootstrap,
-      HADOOP_CONF_DIR_VAL)
-    val expectedDriverSparkConf = Map(HADOOP_CONF_DIR_LOC -> HADOOP_CONF_DIR_VAL)
-    val expectedConfigMap = Map(
-      TEMP_HADOOP_FILE.toPath.getFileName.toString ->
-        readFileToString(TEMP_HADOOP_FILE))
+    val hadoopSparkUserStep = new HadoopConfSparkUserStep(hadoopConfSparkUserBootstrap)
     val hadoopConfSpec = HadoopConfigSpec(
       Map.empty[String, String],
       new Pod(),
@@ -86,16 +67,8 @@ private[spark] class HadoopConfMounterStepSuite extends SparkFunSuite with Befor
       None,
       "",
       "")
-    val returnContainerSpec = hadoopConfStep.configureContainers(hadoopConfSpec)
-    assert(expectedDriverSparkConf === returnContainerSpec.additionalDriverSparkConf)
+    val returnContainerSpec = hadoopSparkUserStep.configureContainers(hadoopConfSpec)
     assert(returnContainerSpec.driverContainer.getName == DRIVER_CONTAINER_NAME)
     assert(returnContainerSpec.driverPod.getMetadata.getLabels.asScala === POD_LABEL)
-    assert(returnContainerSpec.configMapProperties === expectedConfigMap)
-  }
-  private def createTempFile(contents: String): File = {
-    val dir = Utils.createTempDir()
-    val file = new File(dir, s"${UUID.randomUUID().toString}")
-    Files.write(contents.getBytes, file)
-    file
   }
 }
