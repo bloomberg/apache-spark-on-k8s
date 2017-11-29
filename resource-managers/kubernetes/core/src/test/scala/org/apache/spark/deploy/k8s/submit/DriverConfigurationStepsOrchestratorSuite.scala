@@ -131,7 +131,6 @@ private[spark] class DriverConfigurationStepsOrchestratorSuite extends SparkFunS
       classOf[RStep])
   }
 
-
   test("Only submitter local files without a resource staging server.") {
     val sparkConf = new SparkConf(false).set("spark.files", "/var/spark/file1.txt")
     val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
@@ -169,6 +168,7 @@ private[spark] class DriverConfigurationStepsOrchestratorSuite extends SparkFunS
       MAIN_CLASS,
       APP_ARGS,
       Seq.empty[String],
+      None,
       sparkConf)
     validateStepTypes(
       orchestrator,
