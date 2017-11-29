@@ -31,11 +31,14 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
 private[spark] trait HadoopUGIUtil {
   def getCurrentUser: UserGroupInformation
   def getShortUserName: String
+  def getFileSystem(hadoopConf: Configuration): FileSystem
   def isSecurityEnabled: Boolean
   def loginUserFromKeytabAndReturnUGI(principal: String, keytab: String) :
     UserGroupInformation
-  def dfsAddDelegationToken(hadoopConf: Configuration, renewer: String, creds: Credentials) :
-    Iterable[Token[_ <: TokenIdentifier]]
+  def dfsAddDelegationToken(fileSystem: FileSystem,
+    hadoopConf: Configuration,
+    renewer: String,
+    creds: Credentials) : Iterable[Token[_ <: TokenIdentifier]]
   def getCurrentTime: Long
   def getTokenRenewalInterval(
      renewedTokens: Iterable[Token[_ <: TokenIdentifier]],
@@ -49,15 +52,17 @@ private[spark] class HadoopUGIUtilImpl extends HadoopUGIUtil {
   private val clock: Clock = new SystemClock()
   def getCurrentUser: UserGroupInformation = UserGroupInformation.getCurrentUser
   def getShortUserName : String = getCurrentUser.getShortUserName
-
+  def getFileSystem(hadoopConf: Configuration): FileSystem = FileSystem.get(hadoopConf)
   def isSecurityEnabled: Boolean = UserGroupInformation.isSecurityEnabled
 
   def loginUserFromKeytabAndReturnUGI(principal: String, keytab: String): UserGroupInformation =
     UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
 
-  def dfsAddDelegationToken(hadoopConf: Configuration, renewer: String, creds: Credentials)
-    : Iterable[Token[_ <: TokenIdentifier]] =
-    FileSystem.get(hadoopConf).addDelegationTokens(renewer, creds)
+  def dfsAddDelegationToken(fileSystem: FileSystem,
+    hadoopConf: Configuration,
+    renewer: String,
+    creds: Credentials) : Iterable[Token[_ <: TokenIdentifier]] =
+      fileSystem.addDelegationTokens(renewer, creds)
 
   def getCurrentTime: Long = clock.getTimeMillis()
 

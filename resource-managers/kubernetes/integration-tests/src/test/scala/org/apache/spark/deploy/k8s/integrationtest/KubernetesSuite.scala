@@ -58,7 +58,6 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
 
   override def afterAll(): Unit = {
     testBackend.cleanUp()
-    Thread.sleep(5000)
   }
 
   before {

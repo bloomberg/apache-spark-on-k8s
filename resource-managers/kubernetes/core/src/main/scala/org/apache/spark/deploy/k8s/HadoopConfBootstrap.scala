@@ -34,9 +34,8 @@ private[spark] trait HadoopConfBootstrap {
   * Bootstraps a main container with the ConfigMaps containing Hadoop config files
   * mounted as volumes and an ENV variable pointing to the mounted file.
   */
-  def bootstrapMainContainerAndVolumes(
-    originalPodWithMainContainer: PodWithMainContainer)
-  : PodWithMainContainer
+  def bootstrapMainContainerAndVolumes(originalPodWithMainContainer: PodWithMainContainer)
+    : PodWithMainContainer
 }
 
 private[spark] class HadoopConfBootstrapImpl(

@@ -23,7 +23,6 @@ import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.SecretBuilder
 import org.apache.commons.codec.binary.Base64
-import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 
@@ -54,11 +53,7 @@ private[spark] class HadoopKerberosKeytabResolverStep(
     maybeRenewerPrincipal: Option[String],
     hadoopUGI: HadoopUGIUtil) extends HadoopConfigurationStep with Logging {
 
-    private var originalCredentials: Credentials = _
-    private var dfs : FileSystem = _
-    private var renewer: String = _
     private var credentials: Credentials = _
-    private var tokens: Iterable[Token[_ <: TokenIdentifier]] = _
 
     override def configureContainers(hadoopConfigSpec: HadoopConfigSpec): HadoopConfigSpec = {
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(submissionSparkConf)
@@ -81,19 +76,21 @@ private[spark] class HadoopKerberosKeytabResolverStep(
       // In the case that keytab is not specified we will read from Local Ticket Cache
       val jobUserUGI = maybeJobUserUGI.getOrElse(hadoopUGI.getCurrentUser)
       // It is necessary to run as jobUserUGI because logged in user != Current User
-      jobUserUGI.doAs(new PrivilegedExceptionAction[Void] {
-        override def run(): Void = {
-          originalCredentials = jobUserUGI.getCredentials
+      val tokens = jobUserUGI.doAs(
+        new PrivilegedExceptionAction[Iterable[Token[_ <: TokenIdentifier]]] {
+        override def run(): Iterable[Token[_ <: TokenIdentifier]] = {
+          val originalCredentials = jobUserUGI.getCredentials
           // TODO: This is not necessary with [Spark-20328] since we would be using
           // Spark core providers to handle delegation token renewal
-          renewer = maybeRenewerPrincipal.getOrElse(jobUserUGI.getShortUserName)
+          val renewerPrincipal = maybeRenewerPrincipal.getOrElse(jobUserUGI.getShortUserName)
           credentials = new Credentials(originalCredentials)
-          hadoopUGI.dfsAddDelegationToken(hadoopConf, renewer, credentials)
-          tokens = credentials.getAllTokens.asScala
-          null
+          hadoopUGI.dfsAddDelegationToken(hadoopUGI.getFileSystem(hadoopConf),
+            hadoopConf,
+            renewerPrincipal,
+            credentials)
+          credentials.getAllTokens.asScala
         }})
-      // TODO: Figure out how to MOCK this properly so exception can be thrown
-      // if (tokens.isEmpty) throw new SparkException(s"${credentials.getAllTokens.asScala}")
+      if (tokens.isEmpty) throw new SparkException(s"Did not obtain any delegation tokens")
       val data = hadoopUGI.serialize(credentials)
       val renewalInterval =
         hadoopUGI.getTokenRenewalInterval(tokens, hadoopConf).getOrElse(Long.MaxValue)
