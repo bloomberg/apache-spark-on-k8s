@@ -156,6 +156,30 @@ private[spark] class DriverConfigurationStepsOrchestratorSuite extends SparkFunS
         classOf[MountSmallLocalFilesStep])
   }
 
+  test("No submitter local files without a resource staging server") {
+    val sparkConf = new SparkConf(false).set(
+      "spark.files", "hdfs://localhost:9000/var/foo.txt,https://localhost:8080/var/bar.txt")
+    val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
+    val orchestrator = new DriverConfigurationStepsOrchestrator(
+      NAMESPACE,
+      APP_ID,
+      LAUNCH_TIME,
+      mainAppResource,
+      APP_NAME,
+      MAIN_CLASS,
+      APP_ARGS,
+      Seq.empty[String],
+      sparkConf)
+    validateStepTypes(
+      orchestrator,
+      classOf[BaseDriverConfigurationStep],
+      classOf[DriverServiceBootstrapStep],
+      classOf[DriverKubernetesCredentialsStep],
+      classOf[DependencyResolutionStep],
+      classOf[LocalDirectoryMountConfigurationStep],
+      classOf[InitContainerBootstrapStep])
+  }
+
   test("Submission steps with driver secrets to mount") {
     val sparkConf = new SparkConf(false)
       .set(s"$KUBERNETES_DRIVER_SECRETS_PREFIX$SECRET_FOO", SECRET_MOUNT_PATH)
