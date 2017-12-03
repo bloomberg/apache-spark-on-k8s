@@ -92,6 +92,7 @@ private[spark] class HadoopConfMounterStepSuite extends SparkFunSuite with Befor
     assert(returnContainerSpec.driverPod.getMetadata.getLabels.asScala === POD_LABEL)
     assert(returnContainerSpec.configMapProperties === expectedConfigMap)
   }
+
   private def createTempFile(contents: String): File = {
     val dir = Utils.createTempDir()
     val file = new File(dir, s"${UUID.randomUUID().toString}")

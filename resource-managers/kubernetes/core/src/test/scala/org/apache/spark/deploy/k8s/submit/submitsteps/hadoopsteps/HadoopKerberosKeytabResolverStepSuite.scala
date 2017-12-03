@@ -107,7 +107,7 @@ private[spark] class HadoopKerberosKeytabResolverStepSuite
       any[Configuration])).thenReturn(Some(INTERVAL))
   }
 
-  test("Testing Error Catching for Security Enabling") {
+  test("Testing error catching for security enabling") {
     when(hadoopUtil.isSecurityEnabled).thenReturn(false)
     val keytabStep = new HadoopKerberosKeytabResolverStep(
       KUBE_TEST_NAME,
@@ -134,7 +134,7 @@ private[spark] class HadoopKerberosKeytabResolverStepSuite
     }
   }
 
-  test("Testing Error Catching for No Token catching") {
+  test("Testing error catching for no token catching") {
     when(hadoopUtil.isSecurityEnabled).thenReturn(false)
     when(ugi.doAs(any(classOf[PrivilegedExceptionAction[Iterable[Token[_ <: TokenIdentifier]]]])))
       .thenReturn(Iterable[Token[_ <: TokenIdentifier]]())

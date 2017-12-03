@@ -84,6 +84,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         configMap,
         configMapKey)
     }
+
     val hadoopUtil = new HadoopUGIUtilImpl
     val hadoopBootStrap = maybeHadoopConfigMap.map{ hadoopConfigMap =>
       val hadoopConfigurations = maybeHadoopConfDir.map(
@@ -93,6 +94,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         hadoopConfigurations,
         hadoopUtil)
     }
+
     val kerberosBootstrap =
       maybeHadoopConfigMap.flatMap { _ =>
         for {
@@ -104,12 +106,14 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
           secretItemKey,
           Utils.getCurrentUserName() ) }
       }
+
     val hadoopUserBootstrap =
       if (hadoopBootStrap.isDefined && kerberosBootstrap.isEmpty) {
         Some(new HadoopConfSparkUserBootstrapImpl(hadoopUtil))
       } else {
         None
       }
+
     val mountSmallFilesBootstrap = for {
       secretName <- maybeSubmittedFilesSecret
       secretMountPath <- maybeSubmittedFilesSecretMountPath
@@ -129,6 +133,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       logWarning("The executor's init-container config map was not specified. Executors will" +
         " therefore not attempt to fetch remote or submitted dependencies.")
     }
+
     if (maybeInitContainerConfigMapKey.isEmpty) {
       logWarning("The executor's init-container config map key was not specified. Executors will" +
         " therefore not attempt to fetch remote or submitted dependencies.")
@@ -136,8 +141,9 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
 
     if (maybeHadoopConfigMap.isEmpty) {
       logWarning("The executor's hadoop config map key was not specified. Executors will" +
-        " therefore not attempt to fetch hadoop configuration files.")
+        " therefore not attempt to mount hadoop configuration files.")
     }
+
     val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(
         KUBERNETES_MASTER_INTERNAL_URL,
         Some(sparkConf.get(KUBERNETES_NAMESPACE)),
@@ -188,6 +194,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
   override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {
     scheduler.asInstanceOf[TaskSchedulerImpl].initialize(backend)
   }
+
   private def getHadoopConfFiles(path: String) : Array[File] = {
     val dir = new File(path)
     if (dir.isDirectory) {

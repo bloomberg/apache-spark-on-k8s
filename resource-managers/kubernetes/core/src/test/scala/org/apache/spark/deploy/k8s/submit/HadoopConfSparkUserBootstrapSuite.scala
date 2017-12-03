@@ -39,7 +39,7 @@ private[spark] class HadoopConfSparkUserBootstrapSuite extends SparkFunSuite wit
     when(hadoopUtil.getShortUserName).thenReturn(SPARK_USER_VALUE)
   }
 
-  test("Test of bootstrapping hadoop_conf_dir files") {
+  test("Test of bootstrapping ENV_VARs for SPARK_USER") {
     val hadoopConfStep = new HadoopConfSparkUserBootstrapImpl(hadoopUtil)
     val emptyPod = new PodBuilder().withNewSpec().endSpec().build()
     val podWithMain = PodWithMainContainer(

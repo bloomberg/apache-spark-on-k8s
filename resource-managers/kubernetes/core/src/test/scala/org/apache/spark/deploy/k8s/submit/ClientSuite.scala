@@ -161,7 +161,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
             s"${SecondTestConfigurationStep.sparkConfValue}",
         s"-XX:+HeapDumpOnOutOfMemoryError",
         s"-XX:+PrintGCDetails",
-        "-Dspark.hadoop.hadoop.security.authentication=simple")
+        s"-D$HADOOP_SECURITY_AUTHENTICATION=simple")
     driverJvmOptsEnvs.zip(expectedJvmOptsValues).zipWithIndex.foreach {
       case ((resolvedEnv, expectedJvmOpt), index) =>
         assert(resolvedEnv.getName === s"$ENV_JAVA_OPT_PREFIX$index")

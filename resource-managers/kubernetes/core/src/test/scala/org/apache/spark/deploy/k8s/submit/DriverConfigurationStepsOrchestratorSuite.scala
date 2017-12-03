@@ -205,6 +205,7 @@ private[spark] class DriverConfigurationStepsOrchestratorSuite extends SparkFunS
       classOf[LocalDirectoryMountConfigurationStep],
       classOf[MountSecretsStep])
   }
+
   test("Submission steps with hdfs interaction and HADOOP_CONF_DIR defined") {
     val sparkConf = new SparkConf(false)
     val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")

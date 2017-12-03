@@ -504,38 +504,38 @@ package object config extends Logging {
 
   private[spark] val KUBERNETES_KERBEROS_KEYTAB =
     ConfigBuilder("spark.kubernetes.kerberos.keytab")
-      .doc("Specify the location of keytab" +
-        " for Kerberos in order to access Secure HDFS")
+      .doc("Specify the location of keytab " +
+        "for Kerberos in order to access Secure HDFS")
       .stringConf
       .createOptional
 
   private[spark] val KUBERNETES_KERBEROS_PRINCIPAL =
     ConfigBuilder("spark.kubernetes.kerberos.principal")
-      .doc("Specify the principal" +
-        " for Kerberos in order to access Secure HDFS")
+      .doc("Specify the principal " +
+        "for Kerberos in order to access Secure HDFS")
       .stringConf
       .createOptional
 
   private[spark] val KUBERNETES_KERBEROS_RENEWER_PRINCIPAL =
     ConfigBuilder("spark.kubernetes.kerberos.renewer.principal")
-      .doc("Specify the principal" +
-        " you wish to renew and retrieve your Kerberos values with")
+      .doc("Specify the principal " +
+        "you wish to renew and retrieve your Kerberos values with")
       .stringConf
       .createOptional
 
   private[spark] val KUBERNETES_KERBEROS_DT_SECRET_NAME =
     ConfigBuilder("spark.kubernetes.kerberos.tokensecret.name")
       .doc("Specify the name of the secret where " +
-        " your existing delegation token is stored. This removes the need" +
-        " for the job user to provide any keytab for launching a job")
+        "your existing delegation token is stored. This removes the need " +
+        "for the job user to provide any keytab for launching a job")
       .stringConf
       .createOptional
 
   private[spark] val KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY =
     ConfigBuilder("spark.kubernetes.kerberos.tokensecret.itemkey")
       .doc("Specify the item key of the data where " +
-        " your existing delegation token is stored. This removes the need" +
-        " for the job user to provide any keytab for launching a job")
+        "your existing delegation token is stored. This removes the need " +
+        "for the job user to provide any keytab for launching a job")
       .stringConf
       .createOptional
 

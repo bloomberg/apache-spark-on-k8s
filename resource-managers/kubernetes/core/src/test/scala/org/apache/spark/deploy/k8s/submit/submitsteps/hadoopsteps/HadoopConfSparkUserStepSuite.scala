@@ -57,7 +57,7 @@ private[spark] class HadoopConfSparkUserStepSuite extends SparkFunSuite with Bef
         )}})
   }
 
-  test("Test of mounting hadoop_conf_dir files into HadoopConfigSpec") {
+  test("Test of calling the SPARK_USER bootstrap to modify the HadoopConfSpec") {
     val hadoopSparkUserStep = new HadoopConfSparkUserStep(hadoopConfSparkUserBootstrap)
     val hadoopConfSpec = HadoopConfigSpec(
       Map.empty[String, String],

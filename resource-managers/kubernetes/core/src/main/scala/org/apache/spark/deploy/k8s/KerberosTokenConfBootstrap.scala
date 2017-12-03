@@ -40,7 +40,7 @@ private[spark] class KerberosTokenConfBootstrapImpl(
 
     override def bootstrapMainContainerAndVolumes(
       originalPodWithMainContainer: PodWithMainContainer) : PodWithMainContainer = {
-      logInfo("Mounting HDFS DT from Secret for Secure HDFS")
+      logInfo(s"Mounting HDFS DT from Secret $secretName for Secure HDFS")
       val secretMountedPod = new PodBuilder(originalPodWithMainContainer.pod)
         .editOrNewSpec()
           .addNewVolume()

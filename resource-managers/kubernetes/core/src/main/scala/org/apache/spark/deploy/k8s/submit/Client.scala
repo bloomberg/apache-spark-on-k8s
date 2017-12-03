@@ -69,7 +69,7 @@ private[spark] object ClientArguments {
         otherPyFiles,
         mainClass.get,
         driverArgs.toArray,
-        sys.env.get("HADOOP_CONF_DIR"))
+        sys.env.get(ENV_HADOOP_CONF_DIR))
   }
 }
 
@@ -163,8 +163,7 @@ private[spark] class Client(
 }
 
 private[spark] object Client {
-    def run(sparkConf: SparkConf,
-          clientArguments: ClientArguments): Unit = {
+  def run(sparkConf: SparkConf, clientArguments: ClientArguments): Unit = {
     val namespace = sparkConf.get(KUBERNETES_NAMESPACE)
     val kubernetesAppId = s"spark-${UUID.randomUUID().toString.replaceAll("-", "")}"
     val launchTime = System.currentTimeMillis()

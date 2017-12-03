@@ -58,7 +58,8 @@ private[spark] class HadoopKerberosKeytabResolverStep(
     override def configureContainers(hadoopConfigSpec: HadoopConfigSpec): HadoopConfigSpec = {
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(submissionSparkConf)
       if (!hadoopUGI.isSecurityEnabled) {
-        throw new SparkException("Hadoop not configured with Kerberos") }
+        throw new SparkException("Hadoop not configured with Kerberos")
+      }
       val maybeJobUserUGI =
         for {
           principal <- maybePrincipal
@@ -90,6 +91,7 @@ private[spark] class HadoopKerberosKeytabResolverStep(
             credentials)
           credentials.getAllTokens.asScala
         }})
+
       if (tokens.isEmpty) throw new SparkException(s"Did not obtain any delegation tokens")
       val data = hadoopUGI.serialize(credentials)
       val renewalInterval =

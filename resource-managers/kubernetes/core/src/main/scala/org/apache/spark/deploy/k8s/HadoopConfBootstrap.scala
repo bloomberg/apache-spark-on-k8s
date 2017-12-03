@@ -45,8 +45,8 @@ private[spark] class HadoopConfBootstrapImpl(
 
   override def bootstrapMainContainerAndVolumes(originalPodWithMainContainer: PodWithMainContainer)
     : PodWithMainContainer = {
-    logInfo("HADOOP_CONF_DIR defined. Mounting Hadoop specific .xml files")
-    val keyPaths = hadoopConfigFiles.map{ file =>
+    logInfo("HADOOP_CONF_DIR defined. Mounting Hadoop specific files")
+    val keyPaths = hadoopConfigFiles.map { file =>
       val fileStringPath = file.toPath.getFileName.toString
       new KeyToPathBuilder()
         .withKey(fileStringPath)
@@ -74,6 +74,7 @@ private[spark] class HadoopConfBootstrapImpl(
         .withValue(HADOOP_CONF_DIR_PATH)
         .endEnv()
       .build()
+
     originalPodWithMainContainer.copy(
       pod = hadoopSupportedPod,
       mainContainer = hadoopSupportedContainer)
