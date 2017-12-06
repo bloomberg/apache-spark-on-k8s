@@ -109,11 +109,11 @@ package object constants {
     "spark.kubernetes.hadoop.executor.hadoopConfigMapName"
 
   // Kerberos Configuration
-  private[spark] val HADOOP_KERBEROS_SECRET_NAME =
+  private[spark] val KERBEROS_DELEGEGATION_TOKEN_SECRET_NAME =
     "spark.kubernetes.kerberos.delegationTokenSecretName"
-  private[spark] val HADOOP_KERBEROS_CONF_SECRET =
+  private[spark] val KERBEROS_KEYTAB_SECRET_NAME =
     "spark.kubernetes.kerberos.keyTabSecretName"
-  private[spark] val HADOOP_KERBEROS_CONF_ITEM_KEY =
+  private[spark] val KERBEROS_KEYTAB_SECRET_KEY =
     "spark.kubernetes.kerberos.keyTabSecretKey"
   private[spark] val KERBEROS_SECRET_LABEL_PREFIX =
     "hadoop-tokens"

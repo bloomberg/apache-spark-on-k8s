@@ -37,8 +37,8 @@ private[spark] class HadoopKerberosSecretResolverStepSuite extends SparkFunSuite
       TOKEN_SECRET_NAME,
       TOKEN_SECRET_DATA_ITEM_KEY)
     val expectedDriverSparkConf = Map(
-      HADOOP_KERBEROS_CONF_ITEM_KEY -> TOKEN_SECRET_DATA_ITEM_KEY,
-      HADOOP_KERBEROS_CONF_SECRET -> TOKEN_SECRET_NAME)
+      KERBEROS_KEYTAB_SECRET_KEY -> TOKEN_SECRET_DATA_ITEM_KEY,
+      KERBEROS_KEYTAB_SECRET_NAME -> TOKEN_SECRET_NAME)
     val hadoopConfSpec = HadoopConfigSpec(
       Map.empty[String, String],
       new PodBuilder()

@@ -67,7 +67,7 @@ private[spark] class HadoopKerberosKeytabResolverStepSuite
   private val DATA_KEY_NAME =
     s"$KERBEROS_SECRET_LABEL_PREFIX-$CURR_TIME-$INTERVAL"
   private val SECRET_NAME =
-    s"$KUBE_TEST_NAME-$HADOOP_KERBEROS_SECRET_NAME.$CURR_TIME"
+    s"$KUBE_TEST_NAME-$KERBEROS_DELEGEGATION_TOKEN_SECRET_NAME.$CURR_TIME"
 
   private val hadoopUGI = new HadoopUGIUtilImpl
 
@@ -208,11 +208,11 @@ private[spark] class HadoopKerberosKeytabResolverStepSuite
     })
     // TODO: ACTION.run() is still not calling the above function
     // assert(action.run() == Iterable[Token[_ <: TokenIdentifier]](TEST_TOKEN))
-    assert(returnContainerSpec.additionalDriverSparkConf(HADOOP_KERBEROS_CONF_ITEM_KEY)
+    assert(returnContainerSpec.additionalDriverSparkConf(KERBEROS_KEYTAB_SECRET_KEY)
       .contains(KERBEROS_SECRET_LABEL_PREFIX))
     assert(returnContainerSpec.additionalDriverSparkConf ===
-      Map(HADOOP_KERBEROS_CONF_ITEM_KEY -> DATA_KEY_NAME,
-        HADOOP_KERBEROS_CONF_SECRET -> SECRET_NAME))
+      Map(KERBEROS_KEYTAB_SECRET_KEY -> DATA_KEY_NAME,
+        KERBEROS_KEYTAB_SECRET_NAME -> SECRET_NAME))
     assert(returnContainerSpec.driverContainer.getName == DRIVER_CONTAINER_NAME)
     assert(returnContainerSpec.driverPod.getMetadata.getLabels.asScala === POD_LABEL)
     assert(returnContainerSpec.dtSecretItemKey === DATA_KEY_NAME)
@@ -270,11 +270,11 @@ private[spark] class HadoopKerberosKeytabResolverStepSuite
     })
     // TODO: ACTION.run() is still not calling the above function
     // assert(action.run() == Iterable[Token[_ <: TokenIdentifier]](TEST_TOKEN))
-    assert(returnContainerSpec.additionalDriverSparkConf(HADOOP_KERBEROS_CONF_ITEM_KEY)
+    assert(returnContainerSpec.additionalDriverSparkConf(KERBEROS_KEYTAB_SECRET_KEY)
       .contains(KERBEROS_SECRET_LABEL_PREFIX))
     assert(returnContainerSpec.additionalDriverSparkConf ===
-      Map(HADOOP_KERBEROS_CONF_ITEM_KEY -> DATA_KEY_NAME,
-        HADOOP_KERBEROS_CONF_SECRET -> SECRET_NAME))
+      Map(KERBEROS_KEYTAB_SECRET_KEY -> DATA_KEY_NAME,
+        KERBEROS_KEYTAB_SECRET_NAME -> SECRET_NAME))
     assert(returnContainerSpec.driverContainer.getName == DRIVER_CONTAINER_NAME)
     assert(returnContainerSpec.driverPod.getMetadata.getLabels.asScala === POD_LABEL)
     assert(returnContainerSpec.dtSecretItemKey === DATA_KEY_NAME)
@@ -332,11 +332,11 @@ private[spark] class HadoopKerberosKeytabResolverStepSuite
     })
     // TODO: ACTION.run() is still not calling the above function
     // assert(action.run() == Iterable[Token[_ <: TokenIdentifier]](TEST_TOKEN))
-    assert(returnContainerSpec.additionalDriverSparkConf(HADOOP_KERBEROS_CONF_ITEM_KEY)
+    assert(returnContainerSpec.additionalDriverSparkConf(KERBEROS_KEYTAB_SECRET_KEY)
       .contains(KERBEROS_SECRET_LABEL_PREFIX))
     assert(returnContainerSpec.additionalDriverSparkConf ===
-      Map(HADOOP_KERBEROS_CONF_ITEM_KEY -> DATA_KEY_NAME,
-        HADOOP_KERBEROS_CONF_SECRET -> SECRET_NAME))
+      Map(KERBEROS_KEYTAB_SECRET_KEY -> DATA_KEY_NAME,
+        KERBEROS_KEYTAB_SECRET_NAME -> SECRET_NAME))
     assert(returnContainerSpec.driverContainer.getName == DRIVER_CONTAINER_NAME)
     assert(returnContainerSpec.driverPod.getMetadata.getLabels.asScala === POD_LABEL)
     assert(returnContainerSpec.dtSecretItemKey === DATA_KEY_NAME)

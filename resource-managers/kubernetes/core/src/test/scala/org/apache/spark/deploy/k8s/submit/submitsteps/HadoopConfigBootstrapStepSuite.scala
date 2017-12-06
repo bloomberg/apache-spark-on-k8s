@@ -35,7 +35,7 @@ private[spark] class HadoopConfigBootstrapStepSuite extends SparkFunSuite with B
   private val DRIVER_CONTAINER_NAME = "driver-container"
   private val EXPECTED_SECRET = new SecretBuilder()
     .withNewMetadata()
-    .withName(HADOOP_KERBEROS_SECRET_NAME)
+    .withName(KERBEROS_DELEGEGATION_TOKEN_SECRET_NAME)
     .endMetadata()
     .addToData("data", "secretdata")
     .build()
@@ -58,7 +58,7 @@ private[spark] class HadoopConfigBootstrapStepSuite extends SparkFunSuite with B
         additionalDriverSparkConf = Map("sparkConf" -> "confValue"),
         dtSecret =
           Some(EXPECTED_SECRET),
-        dtSecretName = HADOOP_KERBEROS_SECRET_NAME,
+        dtSecretName = KERBEROS_DELEGEGATION_TOKEN_SECRET_NAME,
         dtSecretItemKey = ""))
   }
 

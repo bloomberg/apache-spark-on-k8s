@@ -47,8 +47,8 @@ private[spark] class HadoopKerberosSecretResolverStep(
       driverContainer = withKerberosEnvPod.mainContainer,
       additionalDriverSparkConf =
         hadoopConfigSpec.additionalDriverSparkConf ++ Map(
-          HADOOP_KERBEROS_CONF_ITEM_KEY -> tokenItemKeyName,
-          HADOOP_KERBEROS_CONF_SECRET -> tokenSecretName),
+          KERBEROS_KEYTAB_SECRET_KEY -> tokenItemKeyName,
+          KERBEROS_KEYTAB_SECRET_NAME -> tokenSecretName),
       dtSecret = None,
       dtSecretName = tokenSecretName,
       dtSecretItemKey = tokenItemKeyName)

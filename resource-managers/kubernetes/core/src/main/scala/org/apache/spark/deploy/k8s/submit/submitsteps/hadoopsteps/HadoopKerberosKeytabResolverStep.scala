@@ -99,7 +99,7 @@ private[spark] class HadoopKerberosKeytabResolverStep(
       val currentTime = hadoopUGI.getCurrentTime
       val initialTokenDataKeyName = s"$KERBEROS_SECRET_LABEL_PREFIX-$currentTime-$renewalInterval"
       val uniqueSecretName =
-        s"$kubernetesResourceNamePrefix-$HADOOP_KERBEROS_SECRET_NAME.$currentTime"
+        s"$kubernetesResourceNamePrefix-$KERBEROS_DELEGEGATION_TOKEN_SECRET_NAME.$currentTime"
       val secretDT =
         new SecretBuilder()
           .withNewMetadata()
@@ -119,8 +119,8 @@ private[spark] class HadoopKerberosKeytabResolverStep(
       hadoopConfigSpec.copy(
         additionalDriverSparkConf =
           hadoopConfigSpec.additionalDriverSparkConf ++ Map(
-            HADOOP_KERBEROS_CONF_ITEM_KEY -> initialTokenDataKeyName,
-            HADOOP_KERBEROS_CONF_SECRET -> uniqueSecretName),
+            KERBEROS_KEYTAB_SECRET_KEY -> initialTokenDataKeyName,
+            KERBEROS_KEYTAB_SECRET_NAME -> uniqueSecretName),
         driverPod = withKerberosEnvPod.pod,
         driverContainer = withKerberosEnvPod.mainContainer,
         dtSecret = Some(secretDT),

@@ -46,8 +46,8 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val sparkConf = sc.getConf
     val maybeHadoopConfigMap = sparkConf.getOption(HADOOP_CONFIG_MAP_SPARK_CONF_NAME)
     val maybeHadoopConfDir = sparkConf.getOption(HADOOP_CONF_DIR_LOC)
-    val maybeDTSecretName = sparkConf.getOption(HADOOP_KERBEROS_CONF_SECRET)
-    val maybeDTDataItem = sparkConf.getOption(HADOOP_KERBEROS_CONF_ITEM_KEY)
+    val maybeDTSecretName = sparkConf.getOption(KERBEROS_KEYTAB_SECRET_NAME)
+    val maybeDTDataItem = sparkConf.getOption(KERBEROS_KEYTAB_SECRET_KEY)
     val maybeInitContainerConfigMap = sparkConf.get(EXECUTOR_INIT_CONTAINER_CONFIG_MAP)
     val maybeInitContainerConfigMapKey = sparkConf.get(EXECUTOR_INIT_CONTAINER_CONFIG_MAP_KEY)
     val maybeSubmittedFilesSecret = sparkConf.get(EXECUTOR_SUBMITTED_SMALL_FILES_SECRET)
@@ -82,7 +82,9 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         sparkConf.get(INIT_CONTAINER_FILES_DOWNLOAD_LOCATION),
         sparkConf.get(INIT_CONTAINER_MOUNT_TIMEOUT),
         configMap,
-        configMapKey)
+        configMapKey,
+        SPARK_POD_EXECUTOR_ROLE,
+        sparkConf)
     }
 
     val hadoopUtil = new HadoopUGIUtilImpl
@@ -124,6 +126,11 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val executorSecretNamesToMountPaths = ConfigurationUtils.parsePrefixedKeyValuePairs(sparkConf,
       KUBERNETES_EXECUTOR_SECRETS_PREFIX, "executor secrets")
     val mountSecretBootstrap = if (executorSecretNamesToMountPaths.nonEmpty) {
+      Some(new MountSecretsBootstrapImpl(executorSecretNamesToMountPaths))
+    } else {
+      None
+    }
+    val executorInitContainerMountSecretsBootstrap = if (executorSecretNamesToMountPaths.nonEmpty) {
       Some(new MountSecretsBootstrapImpl(executorSecretNamesToMountPaths))
     } else {
       None
@@ -172,6 +179,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         mountSecretBootstrap,
         mountSmallFilesBootstrap,
         executorInitContainerBootstrap,
+        executorInitContainerMountSecretsBootstrap,
         executorInitContainerSecretVolumePlugin,
         executorLocalDirVolumeProvider,
         hadoopBootStrap,
