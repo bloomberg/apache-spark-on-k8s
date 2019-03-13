@@ -22,6 +22,15 @@ import java.io.OutputStream;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 
+import org.apache.http.annotation.Experimental;
+
+/**
+ * :: Experimental ::
+ * An interface for giving streams / channels for shuffle writes
+ *
+ * @since 3.0.0
+ */
+@Experimental
 public interface ShufflePartitionWriter {
 
     OutputStream openStream() throws IOException;

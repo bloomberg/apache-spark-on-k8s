@@ -19,6 +19,15 @@ package org.apache.spark.api.shuffle;
 
 import java.io.IOException;
 
+import org.apache.spark.annotation.Experimental;
+
+/**
+ * :: Experimental ::
+ * An interface for creating and managing shuffle partition writers
+ *
+ * @since 3.0.0
+ */
+@Experimental
 public interface ShuffleMapOutputWriter {
 
     ShufflePartitionWriter getNextPartitionWriter() throws IOException;

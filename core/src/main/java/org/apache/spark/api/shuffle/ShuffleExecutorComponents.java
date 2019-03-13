@@ -17,6 +17,15 @@
 
 package org.apache.spark.api.shuffle;
 
+import org.apache.spark.annotation.Experimental;
+
+/**
+ * :: Experimental ::
+ * An interface for building shuffle support for Executors
+ *
+ * @since 3.0.0
+ */
+@Experimental
 public interface ShuffleExecutorComponents {
 
     void intitializeExecutor(String appId, String execId);

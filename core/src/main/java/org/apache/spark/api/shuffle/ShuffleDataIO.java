@@ -17,7 +17,15 @@
 
 package org.apache.spark.api.shuffle;
 
-public interface ShuffleDataIO {
+import org.apache.spark.annotation.Experimental;
 
+/**
+ * :: Experimental ::
+ * An interface for launching Shuffle related components
+ *
+ * @since 3.0.0
+ */
+@Experimental
+public interface ShuffleDataIO {
     ShuffleExecutorComponents executor();
 }

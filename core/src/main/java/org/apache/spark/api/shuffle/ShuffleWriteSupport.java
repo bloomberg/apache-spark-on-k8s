@@ -19,6 +19,15 @@ package org.apache.spark.api.shuffle;
 
 import java.io.IOException;
 
+import org.apache.http.annotation.Experimental;
+
+/**
+ * :: Experimental ::
+ * An interface for deploying a shuffle map output writer
+ *
+ * @since 3.0.0
+ */
+@Experimental
 public interface ShuffleWriteSupport {
 
    ShuffleMapOutputWriter createMapOutputWriter(
