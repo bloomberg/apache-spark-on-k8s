@@ -27,8 +27,7 @@ import org.apache.spark.annotation.Experimental;
  */
 @Experimental
 public interface ShuffleExecutorComponents {
+  void intitializeExecutor(String appId, String execId);
 
-    void intitializeExecutor(String appId, String execId);
-
-    ShuffleWriteSupport writes();
+  ShuffleWriteSupport writes();
 }

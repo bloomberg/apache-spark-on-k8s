@@ -29,10 +29,9 @@ import org.apache.spark.annotation.Experimental;
  */
 @Experimental
 public interface ShuffleMapOutputWriter {
+  ShufflePartitionWriter getNextPartitionWriter() throws IOException;
 
-    ShufflePartitionWriter getNextPartitionWriter() throws IOException;
+  void commitAllPartitions() throws IOException;
 
-    void commitAllPartitions() throws IOException;
-
-    void abort(Throwable error) throws IOException;
+  void abort(Throwable error) throws IOException;
 }

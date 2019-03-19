@@ -32,12 +32,11 @@ import org.apache.http.annotation.Experimental;
  */
 @Experimental
 public interface ShufflePartitionWriter {
+  OutputStream openStream() throws IOException;
 
-    OutputStream openStream() throws IOException;
+  long getLength();
 
-    long getLength();
-
-    default WritableByteChannel openChannel() throws IOException {
-        return Channels.newChannel(openStream());
-    }
+  default WritableByteChannel openChannel() throws IOException {
+    return Channels.newChannel(openStream());
+  }
 }
