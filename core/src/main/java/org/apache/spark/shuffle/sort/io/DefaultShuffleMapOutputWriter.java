@@ -47,7 +47,7 @@ public class DefaultShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   private long currChannelPosition;
 
   private final File outputFile;
-  private final File outputTempFile;
+  private File outputTempFile;
   private FileOutputStream outputFileStream;
   private FileChannel outputFileChannel;
   private TimeTrackingOutputStream ts;
@@ -69,11 +69,14 @@ public class DefaultShuffleMapOutputWriter implements ShuffleMapOutputWriter {
         package$.MODULE$.SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE()) * 1024;
     this.partitionLengths = new long[numPartitions];
     this.outputFile = blockResolver.getDataFile(shuffleId, mapId);
-    this.outputTempFile = Utils.tempFileWith(outputFile);
+    this.outputTempFile = null;
   }
 
   @Override
   public ShufflePartitionWriter getNextPartitionWriter() {
+    if (outputTempFile == null) {
+      outputTempFile = Utils.tempFileWith(outputFile);
+    }
     return new DefaultShufflePartitionWriter(currPartitionId++);
   }
 
@@ -81,19 +84,6 @@ public class DefaultShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   public void commitAllPartitions() throws IOException {
     cleanUp();
     blockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, outputTempFile);
-    if (!outputFile.exists()) {
-      if (!outputFile.getParentFile().isDirectory() && !outputFile.getParentFile().mkdirs()) {
-        throw new IOException(
-          String.format(
-            "Failed to create shuffle file directory at %s.",
-            outputFile.getParentFile().getAbsolutePath()));
-      }
-      if (!outputFile.isFile() && !outputFile.createNewFile()) {
-        throw new IOException(
-          String.format(
-            "Failed to create empty shuffle file at %s.", outputFile.getAbsolutePath()));
-      }
-    }
   }
 
   @Override
