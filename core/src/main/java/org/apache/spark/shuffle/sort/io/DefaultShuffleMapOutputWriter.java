@@ -93,11 +93,13 @@ public class DefaultShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     } catch (Exception e) {
       log.error("Unable to close appropriate underlying file stream", e);
     }
-    if (!outputTempFile.delete() && outputTempFile.exists()) {
-      log.warn("Failed to delete temporary shuffle file at {}", outputTempFile.getAbsolutePath());
-    }
-    if (!outputFile.delete() && outputFile.exists()) {
-      log.warn("Failed to delete output shuffle file at {}", outputFile.getAbsolutePath());
+    if (outputTempFile != null) {
+      if (!outputTempFile.delete() && outputTempFile.exists()) {
+        log.warn("Failed to delete temporary shuffle file at {}", outputTempFile.getAbsolutePath());
+      }
+      if (!outputFile.delete() && outputFile.exists()) {
+        log.warn("Failed to delete output shuffle file at {}", outputFile.getAbsolutePath());
+      }
     }
   }
 
