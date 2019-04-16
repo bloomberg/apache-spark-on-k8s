@@ -285,12 +285,16 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     long[] partitionLengths = new long[numPartitions];
     try {
       if (spills.length == 0) {
-        ShufflePartitionWriter writer = null;
-        try {
-          writer = mapWriter.getNextPartitionWriter();
-        } finally {
-          if (writer != null) {
-            writer.close();
+        // The contract we are working under states that we will open a partition writer for
+        // each partition, regardless of number of spills
+        for (int i = 0; i < numPartitions; i++) {
+          ShufflePartitionWriter writer = null;
+          try {
+            writer = mapWriter.getNextPartitionWriter();
+          } finally {
+            if (writer != null) {
+              writer.close();
+            }
           }
         }
         return partitionLengths;
