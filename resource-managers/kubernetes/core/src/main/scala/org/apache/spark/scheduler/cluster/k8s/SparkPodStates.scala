@@ -20,37 +20,28 @@ import java.util.Locale
 
 import io.fabric8.kubernetes.api.model.Pod
 
-import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 
-/**
- * An immutable view of the current executor pods that are running in the cluster.
- */
-private[spark] case class ExecutorPodsSnapshot(executorPods: Map[Long, SparkPodState]) {
-
-  import ExecutorPodsSnapshot._
-
-  def withUpdate(updatedPod: Pod): ExecutorPodsSnapshot = {
-    val newExecutorPods = executorPods ++ toStatesByExecutorId(Seq(updatedPod))
-    new ExecutorPodsSnapshot(newExecutorPods)
-  }
+sealed trait SparkPodState {
+  def pod: Pod
 }
 
-object ExecutorPodsSnapshot extends Logging {
+case class PodRunning(pod: Pod) extends SparkPodState
 
-  def apply(executorPods: Seq[Pod]): ExecutorPodsSnapshot = {
-    ExecutorPodsSnapshot(toStatesByExecutorId(executorPods))
-  }
+case class PodPending(pod: Pod) extends SparkPodState
 
-  def apply(): ExecutorPodsSnapshot = ExecutorPodsSnapshot(Map.empty[Long, SparkPodState])
+sealed trait FinalPodState extends SparkPodState
 
-  private def toStatesByExecutorId(executorPods: Seq[Pod]): Map[Long, SparkPodState] = {
-    executorPods.map { pod =>
-      (pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL).toLong, toState(pod))
-    }.toMap
-  }
+case class PodSucceeded(pod: Pod) extends FinalPodState
 
-  private def toState(pod: Pod): SparkPodState = {
+case class PodFailed(pod: Pod) extends FinalPodState
+
+case class PodDeleted(pod: Pod) extends FinalPodState
+
+case class PodUnknown(pod: Pod) extends SparkPodState
+
+object SparkPodState extends Logging {
+  def toState(pod: Pod): SparkPodState = {
     if (isDeleted(pod)) {
       PodDeleted(pod)
     } else {

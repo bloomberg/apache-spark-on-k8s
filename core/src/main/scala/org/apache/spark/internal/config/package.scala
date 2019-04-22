@@ -360,6 +360,9 @@ package object config {
   private[spark] val SHUFFLE_SERVICE_ENABLED =
     ConfigBuilder("spark.shuffle.service.enabled").booleanConf.createWithDefault(false)
 
+  private[spark] val K8S_SHUFFLE_SERVICE_ENABLED =
+    ConfigBuilder("spark.k8s.shuffle.service.enabled").booleanConf.createWithDefault(false)
+
   private[spark] val SHUFFLE_SERVICE_DB_ENABLED =
     ConfigBuilder("spark.shuffle.service.db.enabled")
       .doc("Whether to use db in ExternalShuffleService. Note that this only affects " +
@@ -772,6 +775,12 @@ package object config {
       .doc("Name of the class to use for shuffle IO.")
       .stringConf
       .createWithDefault(classOf[DefaultShuffleDataIO].getName)
+
+  private[spark] val SHUFFLE_SERVICE_PROVIDER_CLASS =
+    ConfigBuilder("spark.shuffle.provider.plugin.class")
+      .doc("Experimental. Specify a class that can handle detecting shuffle service pods.")
+      .stringConf
+      .createOptional
 
   private[spark] val SHUFFLE_FILE_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.file.buffer")

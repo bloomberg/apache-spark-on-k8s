@@ -14,24 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.scheduler.cluster.k8s
 
-import io.fabric8.kubernetes.api.model.Pod
+package org.apache.spark.shuffle
 
-sealed trait ExecutorPodState {
-  def pod: Pod
+import org.apache.spark.SparkConf
+
+trait ShuffleServiceAddressProviderFactory {
+  def canCreate(masterUrl: String): Boolean
+  def create(conf: SparkConf): ShuffleServiceAddressProvider
 }
-
-case class PodRunning(pod: Pod) extends ExecutorPodState
-
-case class PodPending(pod: Pod) extends ExecutorPodState
-
-sealed trait FinalPodState extends ExecutorPodState
-
-case class PodSucceeded(pod: Pod) extends FinalPodState
-
-case class PodFailed(pod: Pod) extends FinalPodState
-
-case class PodDeleted(pod: Pod) extends FinalPodState
-
-case class PodUnknown(pod: Pod) extends ExecutorPodState

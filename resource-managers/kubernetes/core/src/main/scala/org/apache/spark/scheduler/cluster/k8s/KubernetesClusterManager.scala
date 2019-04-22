@@ -42,33 +42,8 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       sc: SparkContext,
       masterURL: String,
       scheduler: TaskScheduler): SchedulerBackend = {
-    val wasSparkSubmittedInClusterMode = sc.conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK)
-    val (authConfPrefix,
-      apiServerUri,
-      defaultServiceAccountToken,
-      defaultServiceAccountCaCrt) = if (wasSparkSubmittedInClusterMode) {
-      require(sc.conf.get(KUBERNETES_DRIVER_POD_NAME).isDefined,
-        "If the application is deployed using spark-submit in cluster mode, the driver pod name " +
-          "must be provided.")
-      (KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
-        KUBERNETES_MASTER_INTERNAL_URL,
-        Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
-        Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
-    } else {
-      (KUBERNETES_AUTH_CLIENT_MODE_PREFIX,
-        KubernetesUtils.parseMasterUrl(masterURL),
-        None,
-        None)
-    }
-
-    val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(
-      apiServerUri,
-      Some(sc.conf.get(KUBERNETES_NAMESPACE)),
-      authConfPrefix,
-      SparkKubernetesClientFactory.ClientType.Driver,
-      sc.conf,
-      defaultServiceAccountToken,
-      defaultServiceAccountCaCrt)
+    val kubernetesClient = SparkKubernetesClientFactory.getDriverKubernetesClient(
+      sc.conf, masterURL)
 
     if (sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined) {
       KubernetesUtils.loadPodFromTemplate(
