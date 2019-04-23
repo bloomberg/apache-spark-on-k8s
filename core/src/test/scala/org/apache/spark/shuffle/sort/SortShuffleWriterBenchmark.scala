@@ -65,6 +65,7 @@ object SortShuffleWriterBenchmark extends ShuffleWriterBenchmarkBase {
       null,
       null,
       null,
+      null,
       defaultConf
     ))
 

@@ -120,6 +120,7 @@ private[spark] class Executor(
     env.metricsSystem.registerSource(executorSource)
     env.metricsSystem.registerSource(new JVMCPUSource())
     env.metricsSystem.registerSource(env.blockManager.shuffleMetricsSource)
+    env.shuffleServiceAddressProvider.start()
   }
 
   // Whether to load classes in user jars before those in Spark jars

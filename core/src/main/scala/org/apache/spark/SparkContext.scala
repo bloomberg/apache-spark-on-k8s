@@ -536,6 +536,9 @@ class SparkContext(config: SparkConf) extends Logging {
         None
       }
 
+    // Start the ShuffleServiceAddressProvider
+    _env.shuffleServiceAddressProvider.start()
+
     // Optionally scale number of executors dynamically based on workload. Exposed for testing.
     val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(_conf)
     _executorAllocationManager =
