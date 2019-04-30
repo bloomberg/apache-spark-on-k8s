@@ -34,10 +34,10 @@ import org.apache.spark.metrics.source.Source
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
-import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
 import org.apache.spark.shuffle.{BaseShuffleHandle, BlockStoreShuffleReader, FetchFailedException}
+import org.apache.spark.shuffle.io.DefaultShuffleReadSupport
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, BlockManagerMaster, ShuffleBlockId}
 import org.apache.spark.util.{AccumulatorV2, TaskCompletionListener, TaskFailureListener, Utils}
 
@@ -199,12 +199,19 @@ object BlockStoreShuffleReaderBenchmark extends BenchmarkBase {
           val shuffleBlockId = ShuffleBlockId(0, mapId, 0)
           (shuffleBlockId, dataFileLength)
         }
-        Seq((DefaultMapShuffleLocations.get(dataBlockId), shuffleBlockIdsAndSizes)).toIterator
+        Seq((Option.apply(DefaultMapShuffleLocations.get(dataBlockId)), shuffleBlockIdsAndSizes))
+          .toIterator
       }
 
     when(dependency.serializer).thenReturn(serializer)
     when(dependency.aggregator).thenReturn(aggregator)
     when(dependency.keyOrdering).thenReturn(sorter)
+
+    val readSupport = new DefaultShuffleReadSupport(
+      blockManager,
+      mapOutputTracker,
+      serializerManager,
+      defaultConf)
 
     new BlockStoreShuffleReader[String, String](
       shuffleHandle,
@@ -212,8 +219,8 @@ object BlockStoreShuffleReaderBenchmark extends BenchmarkBase {
       1,
       taskContext,
       taskContext.taskMetrics().createTempShuffleReadMetrics(),
+      readSupport,
       serializerManager,
-      blockManager,
       mapOutputTracker
     )
   }

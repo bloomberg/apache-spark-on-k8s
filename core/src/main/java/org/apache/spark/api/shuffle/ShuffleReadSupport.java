@@ -19,17 +19,20 @@ package org.apache.spark.api.shuffle;
 
 import org.apache.spark.annotation.Experimental;
 
+import java.io.IOException;
+import java.io.InputStream;
+
 /**
  * :: Experimental ::
- * An interface for building shuffle support for Executors
- *
+ * An interface for reading shuffle records.
  * @since 3.0.0
  */
 @Experimental
-public interface ShuffleExecutorComponents {
-  void initializeExecutor(String appId, String execId);
-
-  ShuffleWriteSupport writes();
-
-  ShuffleReadSupport reads();
+public interface ShuffleReadSupport {
+  /**
+   * Returns an underlying {@link Iterable<InputStream>} that will iterate
+   * through shuffle data, given an iterable for the shuffle blocks to fetch.
+   */
+  Iterable<InputStream> getPartitionReaders(Iterable<ShuffleBlockInfo> blockMetadata)
+      throws IOException;
 }

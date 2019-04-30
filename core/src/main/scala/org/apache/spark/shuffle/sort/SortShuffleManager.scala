@@ -124,7 +124,11 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
     new BlockStoreShuffleReader(
       handle.asInstanceOf[BaseShuffleHandle[K, _, C]],
-      startPartition, endPartition, context, metrics)
+      startPartition,
+      endPartition,
+      context,
+      metrics,
+      shuffleExecutorComponents.reads())
   }
 
   /** Get a writer for a given partition. Called on executors by map tasks. */
