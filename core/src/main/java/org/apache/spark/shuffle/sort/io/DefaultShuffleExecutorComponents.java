@@ -28,6 +28,8 @@ import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.io.DefaultShuffleReadSupport;
 import org.apache.spark.storage.BlockManager;
 
+import java.util.Map;
+
 public class DefaultShuffleExecutorComponents implements ShuffleExecutorComponents {
 
   private final SparkConf sparkConf;
@@ -41,7 +43,7 @@ public class DefaultShuffleExecutorComponents implements ShuffleExecutorComponen
   }
 
   @Override
-  public void initializeExecutor(String appId, String execId) {
+  public void initializeExecutor(String appId, String execId, Map<String, String> extraConfigs) {
     blockManager = SparkEnv.get().blockManager();
     mapOutputTracker = SparkEnv.get().mapOutputTracker();
     serializerManager = SparkEnv.get().serializerManager();

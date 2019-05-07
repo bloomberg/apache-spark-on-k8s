@@ -15,29 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.sort.io;
+package org.apache.spark.api.shuffle;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.shuffle.ShuffleDriverComponents;
-import org.apache.spark.api.shuffle.ShuffleExecutorComponents;
-import org.apache.spark.api.shuffle.ShuffleDataIO;
-import org.apache.spark.shuffle.sort.lifecycle.DefaultShuffleDriverComponents;
+import java.io.IOException;
+import java.util.Map;
 
-public class DefaultShuffleDataIO implements ShuffleDataIO {
+public interface ShuffleDriverComponents {
 
-  private final SparkConf sparkConf;
+  /**
+   * @return additional SparkConf values necessary for the executors.
+   */
+  Map<String, String> initializeApplication();
 
-  public DefaultShuffleDataIO(SparkConf sparkConf) {
-    this.sparkConf = sparkConf;
-  }
+  void cleanupApplication() throws IOException;
 
-  @Override
-  public ShuffleExecutorComponents executor() {
-    return new DefaultShuffleExecutorComponents(sparkConf);
-  }
-
-  @Override
-  public ShuffleDriverComponents driver() {
-    return new DefaultShuffleDriverComponents();
-  }
+  void removeShuffleData(int shuffleId, boolean blocking) throws IOException;
 }
