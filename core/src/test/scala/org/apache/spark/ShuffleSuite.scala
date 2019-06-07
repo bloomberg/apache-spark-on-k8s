@@ -31,7 +31,7 @@ import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListene
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.ShuffleWriter
 import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId, ShuffleIndexBlockId}
-import org.apache.spark.util.{MutablePair, Utils}
+import org.apache.spark.util.MutablePair
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
@@ -73,7 +73,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
     // All blocks must have non-zero size
     (0 until NUM_BLOCKS).foreach { id =>
-      val statuses = SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(shuffleId, id)
+      val statuses = SparkEnv.get.mapOutputTracker.getMapSizesByShuffleLocation(shuffleId, id)
       assert(statuses.forall(_._2.forall(blockIdSizePair => blockIdSizePair._2 > 0)))
     }
   }
@@ -112,7 +112,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     assert(c.count === 4)
 
     val blockSizes = (0 until NUM_BLOCKS).flatMap { id =>
-      val statuses = SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(shuffleId, id)
+      val statuses = SparkEnv.get.mapOutputTracker.getMapSizesByShuffleLocation(shuffleId, id)
       statuses.flatMap(_._2.map(_._2))
     }
     val nonEmptyBlocks = blockSizes.filter(x => x > 0)
@@ -137,7 +137,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     assert(c.count === 4)
 
     val blockSizes = (0 until NUM_BLOCKS).flatMap { id =>
-      val statuses = SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(shuffleId, id)
+      val statuses = SparkEnv.get.mapOutputTracker.getMapSizesByShuffleLocation(shuffleId, id)
       statuses.flatMap(_._2.map(_._2))
     }
     val nonEmptyBlocks = blockSizes.filter(x => x > 0)
@@ -368,7 +368,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
       new TaskContextImpl(0, 0, 0, 0L, 0, taskMemoryManager, new Properties, metricsSystem)
     val writer1 = manager.getWriter[Int, Int](
       shuffleHandle, 0, context1, context1.taskMetrics.shuffleWriteMetrics)
-    val data1 = (1 to 10).map { x => x -> x}
+    val data1 = (1 to 10).map { x => x -> x }
 
     // second attempt -- also successful.  We'll write out different data,
     // just to simulate the fact that the records may get written differently
@@ -383,13 +383,17 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     // simultaneously, and everything is still OK
 
     def writeAndClose(
-      writer: ShuffleWriter[Int, Int])(
+      writer: ShuffleWriter[Int, Int],
+      taskContext: TaskContext)(
       iter: Iterator[(Int, Int)]): Option[MapStatus] = {
+      TaskContext.setTaskContext(taskContext)
       val files = writer.write(iter)
-      writer.stop(true)
+      val status = writer.stop(true)
+      TaskContext.unset
+      status
     }
     val interleaver = new InterleaveIterators(
-      data1, writeAndClose(writer1), data2, writeAndClose(writer2))
+      data1, writeAndClose(writer1, context1), data2, writeAndClose(writer2, context2))
     val (mapOutput1, mapOutput2) = interleaver.run()
 
     // check that we can read the map output and it has the right data
@@ -405,12 +409,14 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
     val taskContext = new TaskContextImpl(
       1, 0, 0, 2L, 0, taskMemoryManager, new Properties, metricsSystem)
+    TaskContext.setTaskContext(taskContext)
     val metrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
     val reader = manager.getReader[Int, Int](shuffleHandle, 0, 1, taskContext, metrics)
     val readData = reader.read().toIndexedSeq
     assert(readData === data1.toIndexedSeq || readData === data2.toIndexedSeq)
 
     manager.unregisterShuffle(0)
+    TaskContext.unset()
   }
 }
 
