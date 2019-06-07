@@ -17,35 +17,58 @@
 
 package org.apache.spark.shuffle.sort.io;
 
+import org.apache.spark.MapOutputTracker;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.api.shuffle.ShuffleExecutorComponents;
+import org.apache.spark.api.shuffle.ShuffleReadSupport;
 import org.apache.spark.api.shuffle.ShuffleWriteSupport;
+import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
+import org.apache.spark.shuffle.io.DefaultShuffleReadSupport;
 import org.apache.spark.storage.BlockManager;
+
+import java.util.Map;
 
 public class DefaultShuffleExecutorComponents implements ShuffleExecutorComponents {
 
   private final SparkConf sparkConf;
   private BlockManager blockManager;
   private IndexShuffleBlockResolver blockResolver;
+  private MapOutputTracker mapOutputTracker;
+  private SerializerManager serializerManager;
 
   public DefaultShuffleExecutorComponents(SparkConf sparkConf) {
     this.sparkConf = sparkConf;
   }
 
   @Override
-  public void initializeExecutor(String appId, String execId) {
+  public void initializeExecutor(String appId, String execId, Map<String, String> extraConfigs) {
     blockManager = SparkEnv.get().blockManager();
+    mapOutputTracker = SparkEnv.get().mapOutputTracker();
+    serializerManager = SparkEnv.get().serializerManager();
     blockResolver = new IndexShuffleBlockResolver(sparkConf, blockManager);
   }
 
   @Override
   public ShuffleWriteSupport writes() {
+    checkInitialized();
+    return new DefaultShuffleWriteSupport(sparkConf, blockResolver, blockManager.shuffleServerId());
+  }
+
+  @Override
+  public ShuffleReadSupport reads() {
+    checkInitialized();
+    return new DefaultShuffleReadSupport(blockManager,
+        mapOutputTracker,
+        serializerManager,
+        sparkConf);
+  }
+
+  private void checkInitialized() {
     if (blockResolver == null) {
       throw new IllegalStateException(
-        "Executor components must be initialized before getting writers.");
+          "Executor components must be initialized before getting writers.");
     }
-    return new DefaultShuffleWriteSupport(sparkConf, blockResolver, blockManager.shuffleServerId());
   }
 }

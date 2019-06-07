@@ -24,9 +24,12 @@ import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.when
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import scala.util.Random
 
 import org.apache.spark.{Aggregator, MapOutputTracker, ShuffleDependency, SparkConf, SparkEnv, TaskContext}
+import org.apache.spark.api.shuffle.ShuffleLocation
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
@@ -34,10 +37,10 @@ import org.apache.spark.metrics.source.Source
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
-import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
 import org.apache.spark.shuffle.{BaseShuffleHandle, BlockStoreShuffleReader, FetchFailedException}
+import org.apache.spark.shuffle.io.DefaultShuffleReadSupport
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, BlockManagerMaster, ShuffleBlockId}
 import org.apache.spark.util.{AccumulatorV2, TaskCompletionListener, TaskFailureListener, Utils}
 
@@ -195,17 +198,27 @@ object BlockStoreShuffleReaderBenchmark extends BenchmarkBase {
     }
 
     when(mapOutputTracker.getMapSizesByShuffleLocation(0, 0, 1))
-      .thenReturn {
-        val shuffleBlockIdsAndSizes = (0 until NUM_MAPS).map { mapId =>
-          val shuffleBlockId = ShuffleBlockId(0, mapId, 0)
-          (shuffleBlockId, dataFileLength)
+      .thenAnswer(new Answer[Iterator[(Option[ShuffleLocation], Seq[(BlockId, Long)])]] {
+        def answer(invocationOnMock: InvocationOnMock):
+        Iterator[(Option[ShuffleLocation], Seq[(BlockId, Long)])] = {
+          val shuffleBlockIdsAndSizes = (0 until NUM_MAPS).map { mapId =>
+            val shuffleBlockId = ShuffleBlockId(0, mapId, 0)
+            (shuffleBlockId, dataFileLength)
+          }
+          Seq((Option.apply(DefaultMapShuffleLocations.get(dataBlockId)), shuffleBlockIdsAndSizes))
+            .toIterator
         }
-        Seq((DefaultMapShuffleLocations.get(dataBlockId), shuffleBlockIdsAndSizes)).toIterator
-      }
+      })
 
     when(dependency.serializer).thenReturn(serializer)
     when(dependency.aggregator).thenReturn(aggregator)
     when(dependency.keyOrdering).thenReturn(sorter)
+
+    val readSupport = new DefaultShuffleReadSupport(
+      blockManager,
+      mapOutputTracker,
+      serializerManager,
+      defaultConf)
 
     new BlockStoreShuffleReader[String, String](
       shuffleHandle,
@@ -213,8 +226,8 @@ object BlockStoreShuffleReaderBenchmark extends BenchmarkBase {
       1,
       taskContext,
       taskContext.taskMetrics().createTempShuffleReadMetrics(),
+      readSupport,
       serializerManager,
-      blockManager,
       mapOutputTracker
     )
   }

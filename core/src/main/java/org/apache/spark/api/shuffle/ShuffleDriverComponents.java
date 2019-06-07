@@ -18,27 +18,16 @@
 package org.apache.spark.api.shuffle;
 
 import java.io.IOException;
-import java.io.OutputStream;
+import java.util.Map;
 
-import org.apache.spark.annotation.Experimental;
-
-/**
- * :: Experimental ::
- * An interface for giving streams / channels for shuffle writes.
- *
- * @since 3.0.0
- */
-@Experimental
-public interface ShufflePartitionWriter {
+public interface ShuffleDriverComponents {
 
   /**
-   * Opens and returns an underlying {@link OutputStream} that can write bytes to the underlying
-   * data store.
+   * @return additional SparkConf values necessary for the executors.
    */
-  OutputStream openStream() throws IOException;
+  Map<String, String> initializeApplication();
 
-  /**
-   * Get the number of bytes written by this writer's stream returned by {@link #openStream()}.
-   */
-  long getNumBytesWritten();
+  void cleanupApplication() throws IOException;
+
+  void removeShuffleData(int shuffleId, boolean blocking) throws IOException;
 }

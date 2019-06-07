@@ -17,28 +17,22 @@
 
 package org.apache.spark.api.shuffle;
 
-import java.io.IOException;
-import java.io.OutputStream;
-
 import org.apache.spark.annotation.Experimental;
+
+import java.io.IOException;
+import java.io.InputStream;
 
 /**
  * :: Experimental ::
- * An interface for giving streams / channels for shuffle writes.
- *
+ * An interface for reading shuffle records.
  * @since 3.0.0
  */
 @Experimental
-public interface ShufflePartitionWriter {
-
+public interface ShuffleReadSupport {
   /**
-   * Opens and returns an underlying {@link OutputStream} that can write bytes to the underlying
-   * data store.
+   * Returns an underlying {@link Iterable<InputStream>} that will iterate
+   * through shuffle data, given an iterable for the shuffle blocks to fetch.
    */
-  OutputStream openStream() throws IOException;
-
-  /**
-   * Get the number of bytes written by this writer's stream returned by {@link #openStream()}.
-   */
-  long getNumBytesWritten();
+  Iterable<InputStream> getPartitionReaders(Iterable<ShuffleBlockInfo> blockMetadata)
+      throws IOException;
 }

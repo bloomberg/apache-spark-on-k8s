@@ -50,15 +50,13 @@ object UnsafeShuffleWriterBenchmark extends ShuffleWriterBenchmarkBase {
     TaskContext.setTaskContext(taskContext)
     new UnsafeShuffleWriter[String, String](
       blockManager,
-      blockResolver,
       taskMemoryManager,
       shuffleHandle,
       0,
       taskContext,
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics,
-      shuffleWriteSupport
-    )
+      shuffleWriteSupport)
   }
 
   def writeBenchmarkWithSmallDataset(): Unit = {

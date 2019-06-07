@@ -19,6 +19,8 @@ package org.apache.spark.shuffle.sort
 
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark._
 import org.apache.spark.api.shuffle.{ShuffleDataIO, ShuffleExecutorComponents}
 import org.apache.spark.internal.{config, Logging}
@@ -124,7 +126,11 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
     new BlockStoreShuffleReader(
       handle.asInstanceOf[BaseShuffleHandle[K, _, C]],
-      startPartition, endPartition, context, metrics)
+      startPartition,
+      endPartition,
+      context,
+      metrics,
+      shuffleExecutorComponents.reads())
   }
 
   /** Get a writer for a given partition. Called on executors by map tasks. */
@@ -140,7 +146,6 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
         new UnsafeShuffleWriter(
           env.blockManager,
-          shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver],
           context.taskMemoryManager(),
           unsafeShuffleHandle,
           mapId,
@@ -151,7 +156,6 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       case bypassMergeSortHandle: BypassMergeSortShuffleHandle[K @unchecked, V @unchecked] =>
         new BypassMergeSortShuffleWriter(
           env.blockManager,
-          shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver],
           bypassMergeSortHandle,
           mapId,
           env.conf,
@@ -221,7 +225,12 @@ private[spark] object SortShuffleManager extends Logging {
       classOf[ShuffleDataIO], Seq(configuredPluginClasses), conf)
     require(maybeIO.size == 1, s"Failed to load plugins of type $configuredPluginClasses")
     val executorComponents = maybeIO.head.executor()
-    executorComponents.initializeExecutor(conf.getAppId, SparkEnv.get.executorId)
+    val extraConfigs = conf.getAllWithPrefix(ShuffleDataIO.SHUFFLE_SPARK_CONF_PREFIX)
+        .toMap
+    executorComponents.initializeExecutor(
+      conf.getAppId,
+      SparkEnv.get.executorId,
+      extraConfigs.asJava)
     executorComponents
   }
 }
