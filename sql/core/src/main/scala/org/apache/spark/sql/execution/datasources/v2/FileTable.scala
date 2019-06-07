@@ -16,15 +16,18 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.sources.v2.TableCapability._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -34,6 +37,8 @@ abstract class FileTable(
     paths: Seq[String],
     userSpecifiedSchema: Option[StructType])
   extends Table with SupportsRead with SupportsWrite {
+
+  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
   lazy val fileIndex: PartitioningAwareFileIndex = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
@@ -46,25 +51,47 @@ abstract class FileTable(
       sparkSession, rootPathsSpecified, caseSensitiveMap, userSpecifiedSchema, fileStatusCache)
   }
 
-  lazy val dataSchema: StructType = userSpecifiedSchema.orElse {
+  lazy val dataSchema: StructType = userSpecifiedSchema.map { schema =>
+    val partitionSchema = fileIndex.partitionSchema
+    val resolver = sparkSession.sessionState.conf.resolver
+    StructType(schema.filterNot(f => partitionSchema.exists(p => resolver(p.name, f.name))))
+  }.orElse {
     inferSchema(fileIndex.allFiles())
   }.getOrElse {
     throw new AnalysisException(
-      s"Unable to infer schema for $name. It must be specified manually.")
+      s"Unable to infer schema for $formatName. It must be specified manually.")
   }.asNullable
 
   override lazy val schema: StructType = {
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     SchemaUtils.checkColumnNameDuplication(dataSchema.fieldNames,
       "in the data schema", caseSensitive)
+    dataSchema.foreach { field =>
+      if (!supportsDataType(field.dataType)) {
+        throw new AnalysisException(
+          s"$formatName data source does not support ${field.dataType.catalogString} data type.")
+      }
+    }
     val partitionSchema = fileIndex.partitionSchema
     SchemaUtils.checkColumnNameDuplication(partitionSchema.fieldNames,
       "in the partition schema", caseSensitive)
-    PartitioningUtils.mergeDataAndPartitionSchema(dataSchema,
-      partitionSchema, caseSensitive)._1
+    val partitionNameSet: Set[String] =
+      partitionSchema.fields.map(PartitioningUtils.getColName(_, caseSensitive)).toSet
+
+    // When data and partition schemas have overlapping columns,
+    // tableSchema = dataSchema - overlapSchema + partitionSchema
+    val fields = dataSchema.fields.filterNot { field =>
+      val colName = PartitioningUtils.getColName(field, caseSensitive)
+      partitionNameSet.contains(colName)
+    } ++ partitionSchema.fields
+    StructType(fields)
   }
 
-  override def capabilities(): java.util.Set[TableCapability] = FileTable.CAPABILITIES
+  override def partitioning: Array[Transform] = fileIndex.partitionSchema.asTransforms
+
+  override def properties: util.Map[String, String] = options.asCaseSensitiveMap
+
+  override def capabilities: java.util.Set[TableCapability] = FileTable.CAPABILITIES
 
   /**
    * When possible, this method should return the schema of the given `files`.  When the format
@@ -72,6 +99,31 @@ abstract class FileTable(
    * Spark will require that user specify the schema manually.
    */
   def inferSchema(files: Seq[FileStatus]): Option[StructType]
+
+  /**
+   * Returns whether this format supports the given [[DataType]] in read/write path.
+   * By default all data types are supported.
+   */
+  def supportsDataType(dataType: DataType): Boolean = true
+
+  /**
+   * The string that represents the format that this data source provider uses. This is
+   * overridden by children to provide a nice alias for the data source. For example:
+   *
+   * {{{
+   *   override def formatName(): String = "ORC"
+   * }}}
+   */
+  def formatName: String
+
+  /**
+   * Returns a V1 [[FileFormat]] class of the same file data source.
+   * This is a solution for the following cases:
+   * 1. File datasource V2 implementations cause regression. Users can disable the problematic data
+   *    source via SQL configuration and fall back to FileFormat.
+   * 2. Catalog support is required, which is still under development for data source V2.
+   */
+  def fallbackFileFormat: Class[_ <: FileFormat]
 }
 
 object FileTable {

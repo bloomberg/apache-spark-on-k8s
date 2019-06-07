@@ -28,6 +28,8 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalog.v2
+import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
@@ -36,7 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, QualifiedColType}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -112,18 +114,45 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val query = plan(ctx.queryNoWith)
 
     // Apply CTEs
-    query.optional(ctx.ctes) {
-      val ctes = ctx.ctes.namedQuery.asScala.map { nCtx =>
-        val namedQuery = visitNamedQuery(nCtx)
-        (namedQuery.alias, namedQuery)
-      }
-      // Check for duplicate names.
-      checkDuplicateKeys(ctes, ctx)
-      With(query, ctes)
+    query.optionalMap(ctx.ctes)(withCTE)
+  }
+
+  override def visitDmlStatement(ctx: DmlStatementContext): AnyRef = withOrigin(ctx) {
+    val dmlStmt = plan(ctx.dmlStatementNoWith)
+    // Apply CTEs
+    dmlStmt.optionalMap(ctx.ctes)(withCTE)
+  }
+
+  private def withCTE(ctx: CtesContext, plan: LogicalPlan): LogicalPlan = {
+    val ctes = ctx.namedQuery.asScala.map { nCtx =>
+      val namedQuery = visitNamedQuery(nCtx)
+      (namedQuery.alias, namedQuery)
+    }
+    // Check for duplicate names.
+    checkDuplicateKeys(ctes, ctx)
+    With(plan, ctes)
+  }
+
+  override def visitQueryWithFrom(ctx: QueryWithFromContext): LogicalPlan = withOrigin(ctx) {
+    val from = visitFromClause(ctx.fromClause)
+    val selects = ctx.selectStatement.asScala.map { select =>
+      validate(select.querySpecification.fromClause == null,
+        "This select statement can not have FROM cause as its already specified upfront",
+        select)
+
+      withQuerySpecification(select.querySpecification, from).
+        // Add organization statements.
+        optionalMap(select.queryOrganization)(withQueryResultClauses)
+    }
+    // If there are multiple SELECT just UNION them together into one query.
+    if (selects.length == 1) {
+      selects.head
+    } else {
+      Union(selects)
     }
   }
 
-  override def visitQueryToDesc(ctx: QueryToDescContext): LogicalPlan = withOrigin(ctx) {
+  override def visitNoWithQuery(ctx: NoWithQueryContext): LogicalPlan = withOrigin(ctx) {
     plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses)
   }
 
@@ -156,23 +185,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val from = visitFromClause(ctx.fromClause)
 
     // Build the insert clauses.
-    val inserts = ctx.multiInsertQueryBody.asScala.map {
+    val inserts = ctx.multiInsertQueryBody().asScala.map {
       body =>
-        validate(body.querySpecification.fromClause == null,
+        validate(body.selectStatement.querySpecification.fromClause == null,
           "Multi-Insert queries cannot have a FROM clause in their individual SELECT statements",
           body)
 
-        withQuerySpecification(body.querySpecification, from).
-          // Add organization statements.
-          optionalMap(body.queryOrganization)(withQueryResultClauses).
-          // Add insert.
-          optionalMap(body.insertInto())(withInsertInto)
+       withInsertInto(body.insertInto,
+         withQuerySpecification(body.selectStatement.querySpecification, from).
+           // Add organization statements.
+           optionalMap(body.selectStatement.queryOrganization)(withQueryResultClauses))
     }
 
     // If there are multiple INSERTS just UNION them together into one query.
-    inserts match {
-      case Seq(query) => query
-      case queries => Union(queries)
+    if (inserts.length == 1) {
+      inserts.head
+    } else {
+      Union(inserts)
     }
   }
 
@@ -181,11 +210,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitSingleInsertQuery(
       ctx: SingleInsertQueryContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.queryTerm).
-      // Add organization statements.
-      optionalMap(ctx.queryOrganization)(withQueryResultClauses).
-      // Add insert.
-      optionalMap(ctx.insertInto())(withInsertInto)
+    withInsertInto(
+      ctx.insertInto(),
+      plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses))
   }
 
   /**
@@ -1992,7 +2019,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   /**
    * Type to keep track of a table header: (identifier, isTemporary, ifNotExists, isExternal).
    */
-  type TableHeader = (TableIdentifier, Boolean, Boolean, Boolean)
+  type TableHeader = (Seq[String], Boolean, Boolean, Boolean)
 
   /**
    * Validate a create table statement and return the [[TableIdentifier]].
@@ -2004,7 +2031,104 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     if (temporary && ifNotExists) {
       operationNotAllowed("CREATE TEMPORARY TABLE ... IF NOT EXISTS", ctx)
     }
-    (visitTableIdentifier(ctx.tableIdentifier), temporary, ifNotExists, ctx.EXTERNAL != null)
+    val multipartIdentifier = ctx.multipartIdentifier.parts.asScala.map(_.getText)
+    (multipartIdentifier, temporary, ifNotExists, ctx.EXTERNAL != null)
+  }
+
+  /**
+   * Parse a qualified name to a multipart name.
+   */
+  override def visitQualifiedName(ctx: QualifiedNameContext): Seq[String] = withOrigin(ctx) {
+    ctx.identifier.asScala.map(_.getText)
+  }
+
+  /**
+   * Parse a list of transforms.
+   */
+  override def visitTransformList(ctx: TransformListContext): Seq[Transform] = withOrigin(ctx) {
+    def getFieldReference(
+        ctx: ApplyTransformContext,
+        arg: v2.expressions.Expression): FieldReference = {
+      lazy val name: String = ctx.identifier.getText
+      arg match {
+        case ref: FieldReference =>
+          ref
+        case nonRef =>
+          throw new ParseException(
+            s"Expected a column reference for transform $name: ${nonRef.describe}", ctx)
+      }
+    }
+
+    def getSingleFieldReference(
+        ctx: ApplyTransformContext,
+        arguments: Seq[v2.expressions.Expression]): FieldReference = {
+      lazy val name: String = ctx.identifier.getText
+      if (arguments.size > 1) {
+        throw new ParseException(s"Too many arguments for transform $name", ctx)
+      } else if (arguments.isEmpty) {
+        throw new ParseException(s"Not enough arguments for transform $name", ctx)
+      } else {
+        getFieldReference(ctx, arguments.head)
+      }
+    }
+
+    ctx.transforms.asScala.map {
+      case identityCtx: IdentityTransformContext =>
+        IdentityTransform(FieldReference(typedVisit[Seq[String]](identityCtx.qualifiedName)))
+
+      case applyCtx: ApplyTransformContext =>
+        val arguments = applyCtx.argument.asScala.map(visitTransformArgument)
+
+        applyCtx.identifier.getText match {
+          case "bucket" =>
+            val numBuckets: Int = arguments.head match {
+              case LiteralValue(shortValue, ShortType) =>
+                shortValue.asInstanceOf[Short].toInt
+              case LiteralValue(intValue, IntegerType) =>
+                intValue.asInstanceOf[Int]
+              case LiteralValue(longValue, LongType) =>
+                longValue.asInstanceOf[Long].toInt
+              case lit =>
+                throw new ParseException(s"Invalid number of buckets: ${lit.describe}", applyCtx)
+            }
+
+            val fields = arguments.tail.map(arg => getFieldReference(applyCtx, arg))
+
+            BucketTransform(LiteralValue(numBuckets, IntegerType), fields)
+
+          case "years" =>
+            YearsTransform(getSingleFieldReference(applyCtx, arguments))
+
+          case "months" =>
+            MonthsTransform(getSingleFieldReference(applyCtx, arguments))
+
+          case "days" =>
+            DaysTransform(getSingleFieldReference(applyCtx, arguments))
+
+          case "hours" =>
+            HoursTransform(getSingleFieldReference(applyCtx, arguments))
+
+          case name =>
+            ApplyTransform(name, arguments)
+        }
+    }
+  }
+
+  /**
+   * Parse an argument to a transform. An argument may be a field reference (qualified name) or
+   * a value literal.
+   */
+  override def visitTransformArgument(ctx: TransformArgumentContext): v2.expressions.Expression = {
+    withOrigin(ctx) {
+      val reference = Option(ctx.qualifiedName)
+          .map(typedVisit[Seq[String]])
+          .map(FieldReference(_))
+      val literal = Option(ctx.constant)
+          .map(typedVisit[Literal])
+          .map(lit => LiteralValue(lit.value, lit.dataType))
+      reference.orElse(literal)
+          .getOrElse(throw new ParseException(s"Invalid transform argument", ctx))
+    }
   }
 
   /**
@@ -2019,7 +2143,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    *
    *   create_table_clauses (order insensitive):
    *     [OPTIONS table_property_list]
-   *     [PARTITIONED BY (col_name, col_name, ...)]
+   *     [PARTITIONED BY (col_name, transform(col_name), transform(constant, col_name), ...)]
    *     [CLUSTERED BY (col_name, col_name, ...)
    *       [SORTED BY (col_name [ASC|DESC], ...)]
    *       INTO num_buckets BUCKETS
@@ -2043,8 +2167,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
 
     val schema = Option(ctx.colTypeList()).map(createSchema)
-    val partitionCols: Seq[String] =
-      Option(ctx.partitionColumnNames).map(visitIdentifierList).getOrElse(Nil)
+    val partitioning: Seq[Transform] =
+      Option(ctx.partitioning).map(visitTransformList).getOrElse(Nil)
     val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
@@ -2064,7 +2188,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
       case Some(query) =>
         CreateTableAsSelectStatement(
-          table, query, partitionCols, bucketSpec, properties, provider, options, location, comment,
+          table, query, partitioning, bucketSpec, properties, provider, options, location, comment,
           ifNotExists = ifNotExists)
 
       case None if temp =>
@@ -2073,9 +2197,174 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         operationNotAllowed("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
 
       case _ =>
-        CreateTableStatement(table, schema.getOrElse(new StructType), partitionCols, bucketSpec,
+        CreateTableStatement(table, schema.getOrElse(new StructType), partitioning, bucketSpec,
           properties, provider, options, location, comment, ifNotExists = ifNotExists)
     }
   }
 
+  /**
+   * Create a [[DropTableStatement]] command.
+   */
+  override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
+    DropTableStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier()),
+      ctx.EXISTS != null,
+      ctx.PURGE != null)
+  }
+
+  /**
+   * Create a [[DropViewStatement]] command.
+   */
+  override def visitDropView(ctx: DropViewContext): AnyRef = withOrigin(ctx) {
+    DropViewStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier()),
+      ctx.EXISTS != null)
+  }
+
+  /**
+   * Parse new column info from ADD COLUMN into a QualifiedColType.
+   */
+  override def visitQualifiedColTypeWithPosition(
+      ctx: QualifiedColTypeWithPositionContext): QualifiedColType = withOrigin(ctx) {
+    if (ctx.colPosition != null) {
+      operationNotAllowed("ALTER TABLE table ADD COLUMN ... FIRST | AFTER otherCol", ctx)
+    }
+
+    QualifiedColType(
+      typedVisit[Seq[String]](ctx.name),
+      typedVisit[DataType](ctx.dataType),
+      Option(ctx.comment).map(string))
+  }
+
+  /**
+   * Parse a [[AlterTableAddColumnsStatement]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table1
+   *   ADD COLUMNS (col_name data_type [COMMENT col_comment], ...);
+   * }}}
+   */
+  override def visitAddTableColumns(ctx: AddTableColumnsContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableAddColumnsStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      ctx.columns.qualifiedColTypeWithPosition.asScala.map(typedVisit[QualifiedColType])
+    )
+  }
+
+  /**
+   * Parse a [[AlterTableRenameColumnStatement]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table1 RENAME COLUMN a.b.c TO x
+   * }}}
+   */
+  override def visitRenameTableColumn(
+      ctx: RenameTableColumnContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableRenameColumnStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      ctx.from.identifier.asScala.map(_.getText),
+      ctx.to.getText)
+  }
+
+  /**
+   * Parse a [[AlterTableAlterColumnStatement]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table1 ALTER COLUMN a.b.c TYPE bigint
+   *   ALTER TABLE table1 ALTER COLUMN a.b.c TYPE bigint COMMENT 'new comment'
+   *   ALTER TABLE table1 ALTER COLUMN a.b.c COMMENT 'new comment'
+   * }}}
+   */
+  override def visitAlterTableColumn(
+      ctx: AlterTableColumnContext): LogicalPlan = withOrigin(ctx) {
+    val verb = if (ctx.CHANGE != null) "CHANGE" else "ALTER"
+    if (ctx.colPosition != null) {
+      operationNotAllowed(s"ALTER TABLE table $verb COLUMN ... FIRST | AFTER otherCol", ctx)
+    }
+
+    if (ctx.dataType == null && ctx.comment == null) {
+      operationNotAllowed(s"ALTER TABLE table $verb COLUMN requires a TYPE or a COMMENT", ctx)
+    }
+
+    AlterTableAlterColumnStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      typedVisit[Seq[String]](ctx.qualifiedName),
+      Option(ctx.dataType).map(typedVisit[DataType]),
+      Option(ctx.comment).map(string))
+  }
+
+  /**
+   * Parse a [[AlterTableDropColumnsStatement]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table1 DROP COLUMN a.b.c
+   *   ALTER TABLE table1 DROP COLUMNS a.b.c, x, y
+   * }}}
+   */
+  override def visitDropTableColumns(
+      ctx: DropTableColumnsContext): LogicalPlan = withOrigin(ctx) {
+    val columnsToDrop = ctx.columns.qualifiedName.asScala.map(typedVisit[Seq[String]])
+    AlterTableDropColumnsStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      columnsToDrop)
+  }
+
+  /**
+   * Parse [[AlterViewSetPropertiesStatement]] or [[AlterTableSetPropertiesStatement]] commands.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table SET TBLPROPERTIES ('comment' = new_comment);
+   *   ALTER VIEW view SET TBLPROPERTIES ('comment' = new_comment);
+   * }}}
+   */
+  override def visitSetTableProperties(
+      ctx: SetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
+    val identifier = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val properties = visitPropertyKeyValues(ctx.tablePropertyList)
+    if (ctx.VIEW != null) {
+      AlterViewSetPropertiesStatement(identifier, properties)
+    } else {
+      AlterTableSetPropertiesStatement(identifier, properties)
+    }
+  }
+
+  /**
+   * Parse [[AlterViewUnsetPropertiesStatement]] or [[AlterTableUnsetPropertiesStatement]] commands.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
+   *   ALTER VIEW view UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
+   * }}}
+   */
+  override def visitUnsetTableProperties(
+      ctx: UnsetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
+    val identifier = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val properties = visitPropertyKeys(ctx.tablePropertyList)
+    val ifExists = ctx.EXISTS != null
+    if (ctx.VIEW != null) {
+      AlterViewUnsetPropertiesStatement(identifier, properties, ifExists)
+    } else {
+      AlterTableUnsetPropertiesStatement(identifier, properties, ifExists)
+    }
+  }
+
+  /**
+   * Create an [[AlterTableSetLocationStatement]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table SET LOCATION "loc";
+   * }}}
+   */
+  override def visitSetTableLocation(ctx: SetTableLocationContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableSetLocationStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      visitLocationSpec(ctx.locationSpec))
+  }
 }

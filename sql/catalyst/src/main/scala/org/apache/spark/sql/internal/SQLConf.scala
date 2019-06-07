@@ -184,8 +184,8 @@ object SQLConf {
   val OPTIMIZER_PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.optimizer.planChangeLog.level")
     .internal()
     .doc("Configures the log level for logging the change from the original plan to the new " +
-      "plan after a rule is applied. The value can be 'trace', 'debug', 'info', 'warn', or " +
-      "'error'. The default log level is 'trace'.")
+      "plan after a rule or batch is applied. The value can be 'trace', 'debug', 'info', " +
+      "'warn', or 'error'. The default log level is 'trace'.")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValue(logLevel => Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(logLevel),
@@ -195,9 +195,15 @@ object SQLConf {
 
   val OPTIMIZER_PLAN_CHANGE_LOG_RULES = buildConf("spark.sql.optimizer.planChangeLog.rules")
     .internal()
-    .doc("If this configuration is set, the optimizer will only log plan changes caused by " +
-      "applying the rules specified in this configuration. The value can be a list of rule " +
-      "names separated by comma.")
+    .doc("Configures a list of rules to be logged in the optimizer, in which the rules are " +
+      "specified by their rule names and separated by comma.")
+    .stringConf
+    .createOptional
+
+  val OPTIMIZER_PLAN_CHANGE_LOG_BATCHES = buildConf("spark.sql.optimizer.planChangeLog.batches")
+    .internal()
+    .doc("Configures a list of batches to be logged in the optimizer, in which the batches " +
+      "are specified by their batch names and separated by comma.")
     .stringConf
     .createOptional
 
@@ -399,7 +405,7 @@ object SQLConf {
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(ParquetOutputTimestampType.values.map(_.toString))
-    .createWithDefault(ParquetOutputTimestampType.INT96.toString)
+    .createWithDefault(ParquetOutputTimestampType.TIMESTAMP_MICROS.toString)
 
   val PARQUET_INT64_AS_TIMESTAMP_MILLIS = buildConf("spark.sql.parquet.int64AsTimestampMillis")
     .doc(s"(Deprecated since Spark 2.3, please set ${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}.) " +
@@ -889,6 +895,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val SUBQUERY_REUSE_ENABLED = buildConf("spark.sql.subquery.reuse")
+    .internal()
+    .doc("When true, the planner will try to find out duplicated subqueries and re-use them.")
+    .booleanConf
+    .createWithDefault(true)
+
   val STATE_STORE_PROVIDER_CLASS =
     buildConf("spark.sql.streaming.stateStore.providerClass")
       .internal()
@@ -1314,21 +1326,45 @@ object SQLConf {
 
   val ARROW_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.enabled")
-      .doc("When true, make use of Apache Arrow for columnar data transfers. Currently available " +
-        "for use with pyspark.sql.DataFrame.toPandas, " +
-        "pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame, " +
-        "and createDataFrame when its input is an R DataFrame. " +
+      .doc("(Deprecated since Spark 3.0, please set 'spark.sql.execution.arrow.pyspark.enabled'.)")
+      .booleanConf
+      .createWithDefault(false)
+
+  val ARROW_PYSPARK_EXECUTION_ENABLED =
+    buildConf("spark.sql.execution.arrow.pyspark.enabled")
+      .doc("When true, make use of Apache Arrow for columnar data transfers in PySpark. " +
+        "This optimization applies to: " +
+        "1. pyspark.sql.DataFrame.toPandas " +
+        "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
         "The following data types are unsupported: " +
         "BinaryType, MapType, ArrayType of TimestampType, and nested StructType.")
+      .fallbackConf(ARROW_EXECUTION_ENABLED)
+
+  val ARROW_SPARKR_EXECUTION_ENABLED =
+    buildConf("spark.sql.execution.arrow.sparkr.enabled")
+      .doc("When true, make use of Apache Arrow for columnar data transfers in SparkR. " +
+        "This optimization applies to: " +
+        "1. createDataFrame when its input is an R DataFrame " +
+        "2. collect " +
+        "3. dapply " +
+        "4. gapply " +
+        "The following data types are unsupported: " +
+        "FloatType, BinaryType, ArrayType, StructType and MapType.")
       .booleanConf
       .createWithDefault(false)
 
   val ARROW_FALLBACK_ENABLED =
     buildConf("spark.sql.execution.arrow.fallback.enabled")
-      .doc(s"When true, optimizations enabled by '${ARROW_EXECUTION_ENABLED.key}' will " +
-        "fallback automatically to non-optimized implementations if an error occurs.")
+      .doc("(Deprecated since Spark 3.0, please set " +
+        "'spark.sql.execution.arrow.pyspark.fallback.enabled'.)")
       .booleanConf
       .createWithDefault(true)
+
+  val ARROW_PYSPARK_FALLBACK_ENABLED =
+    buildConf("spark.sql.execution.arrow.pyspark.fallback.enabled")
+      .doc(s"When true, optimizations enabled by '${ARROW_PYSPARK_EXECUTION_ENABLED.key}' will " +
+        "fallback automatically to non-optimized implementations if an error occurs.")
+      .fallbackConf(ARROW_FALLBACK_ENABLED)
 
   val ARROW_EXECUTION_MAX_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.maxRecordsPerBatch")
@@ -1482,7 +1518,7 @@ object SQLConf {
       " register class names for which data source V2 write paths are disabled. Writes from these" +
       " sources will fall back to the V1 sources.")
     .stringConf
-    .createWithDefault("csv,orc")
+    .createWithDefault("csv,json,orc,text")
 
   val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
     .doc("A comma-separated list of fully qualified data source register class names for which" +
@@ -1539,7 +1575,7 @@ object SQLConf {
       .internal()
       .doc("Prune nested fields from a logical relation's output which are unnecessary in " +
         "satisfying a query. This optimization allows columnar file format readers to avoid " +
-        "reading unnecessary nested column data. Currently Parquet and ORC v1 are the " +
+        "reading unnecessary nested column data. Currently Parquet and ORC are the " +
         "data sources that implement this optimization.")
       .booleanConf
       .createWithDefault(false)
@@ -1717,6 +1753,37 @@ object SQLConf {
       "and java.sql.Date are used for the same purpose.")
     .booleanConf
     .createWithDefault(false)
+
+  val UTC_TIMESTAMP_FUNC_ENABLED = buildConf("spark.sql.legacy.utcTimestampFunc.enabled")
+    .doc("The configuration property enables the to_utc_timestamp() " +
+         "and from_utc_timestamp() functions.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val SOURCES_BINARY_FILE_MAX_LENGTH = buildConf("spark.sql.sources.binaryFile.maxLength")
+    .doc("The max length of a file that can be read by the binary file data source. " +
+      "Spark will fail fast and not attempt to read the file if its length exceeds this value. " +
+      "The theoretical max is Int.MaxValue, though VMs might implement a smaller max.")
+    .internal()
+    .intConf
+    .createWithDefault(Int.MaxValue)
+
+  val LEGACY_CAST_DATETIME_TO_STRING =
+    buildConf("spark.sql.legacy.typeCoercion.datetimeToString")
+      .doc("If it is set to true, date/timestamp will cast to string in binary comparisons " +
+        "with String")
+    .booleanConf
+    .createWithDefault(false)
+
+  val DEFAULT_V2_CATALOG = buildConf("spark.sql.default.catalog")
+    .doc("Name of the default v2 catalog, used when a catalog is not identified in queries")
+    .stringConf
+    .createOptional
+
+  val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast")
+    .doc("When true, the upcast will be loose and allows string to atomic types.")
+    .booleanConf
+    .createWithDefault(false)
 }
 
 /**
@@ -1750,6 +1817,8 @@ class SQLConf extends Serializable with Logging {
   def optimizerPlanChangeLogLevel: String = getConf(OPTIMIZER_PLAN_CHANGE_LOG_LEVEL)
 
   def optimizerPlanChangeRules: Option[String] = getConf(OPTIMIZER_PLAN_CHANGE_LOG_RULES)
+
+  def optimizerPlanChangeBatches: Option[String] = getConf(OPTIMIZER_PLAN_CHANGE_LOG_BATCHES)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
@@ -1888,6 +1957,8 @@ class SQLConf extends Serializable with Logging {
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 
+  def subqueryReuseEnabled: Boolean = getConf(SUBQUERY_REUSE_ENABLED)
+
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
@@ -1907,6 +1978,8 @@ class SQLConf extends Serializable with Logging {
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
 
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
+
+  def utcTimestampFuncEnabled: Boolean = getConf(UTC_TIMESTAMP_FUNC_ENABLED)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
@@ -1970,7 +2043,10 @@ class SQLConf extends Serializable with Logging {
 
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
 
-  def broadcastTimeout: Long = getConf(BROADCAST_TIMEOUT)
+  def broadcastTimeout: Long = {
+    val timeoutValue = getConf(BROADCAST_TIMEOUT)
+    if (timeoutValue < 0) Long.MaxValue else timeoutValue
+  }
 
   def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
 
@@ -2078,9 +2154,11 @@ class SQLConf extends Serializable with Logging {
 
   def rangeExchangeSampleSizePerPartition: Int = getConf(RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION)
 
-  def arrowEnabled: Boolean = getConf(ARROW_EXECUTION_ENABLED)
+  def arrowPySparkEnabled: Boolean = getConf(ARROW_PYSPARK_EXECUTION_ENABLED)
 
-  def arrowFallbackEnabled: Boolean = getConf(ARROW_FALLBACK_ENABLED)
+  def arrowSparkREnabled: Boolean = getConf(ARROW_SPARKR_EXECUTION_ENABLED)
+
+  def arrowPySparkFallbackEnabled: Boolean = getConf(ARROW_PYSPARK_FALLBACK_ENABLED)
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
@@ -2105,9 +2183,9 @@ class SQLConf extends Serializable with Logging {
   def continuousStreamingExecutorPollIntervalMs: Long =
     getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
 
-  def userV1SourceReaderList: String = getConf(USE_V1_SOURCE_READER_LIST)
+  def useV1SourceReaderList: String = getConf(USE_V1_SOURCE_READER_LIST)
 
-  def userV1SourceWriterList: String = getConf(USE_V1_SOURCE_WRITER_LIST)
+  def useV1SourceWriterList: String = getConf(USE_V1_SOURCE_WRITER_LIST)
 
   def disabledV2StreamingWriters: String = getConf(DISABLED_V2_STREAMING_WRITERS)
 
@@ -2161,6 +2239,10 @@ class SQLConf extends Serializable with Logging {
 
   def setCommandRejectsSparkCoreConfs: Boolean =
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
+
+  def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
+
+  def defaultV2Catalog: Option[String] = getConf(DEFAULT_V2_CATALOG)
 
   /** ********************** SQLConf functionality methods ************ */
 

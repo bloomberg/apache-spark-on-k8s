@@ -61,7 +61,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
         val expectedWaitTime = clock.getTimeMillis() + advancedTime
         clock.advance(advancedTime)
         // Make sure ExecutorAllocationManager.manageAllocation is called
-        eventually(timeout(10 seconds)) {
+        eventually(timeout(10.seconds)) {
           assert(clock.isStreamWaitingAt(expectedWaitTime))
         }
         body
@@ -388,7 +388,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
   }
 
   private def withStreamingContext(conf: SparkConf)(body: StreamingContext => Unit): Unit = {
-    conf.setMaster("myDummyLocalExternalClusterManager")
+    conf.setMaster("local-cluster[1,1,1024]")
       .setAppName(this.getClass.getSimpleName)
       .set("spark.streaming.dynamicAllocation.testing", "true")  // to test dynamic allocation
 

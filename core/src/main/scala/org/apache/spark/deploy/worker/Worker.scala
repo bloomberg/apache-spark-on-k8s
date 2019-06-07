@@ -100,8 +100,8 @@ private[deploy] class Worker(
   // TTL for app folders/data;  after TTL expires it will be cleaned up
   private val APP_DATA_RETENTION_SECONDS = conf.get(APP_DATA_RETENTION)
 
-  // Whether or not cleanup the non-shuffle files on executor exits.
-  private val CLEANUP_NON_SHUFFLE_FILES_ENABLED =
+  // Whether or not cleanup the non-shuffle service served files on executor exits.
+  private val CLEANUP_FILES_AFTER_EXECUTOR_EXIT =
     conf.get(config.STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT)
 
   private var master: Option[RpcEndpointRef] = None
@@ -325,11 +325,9 @@ private[deploy] class Worker(
         if (connectionAttemptCount == INITIAL_REGISTRATION_RETRIES) {
           registrationRetryTimer.foreach(_.cancel(true))
           registrationRetryTimer = Some(
-            forwardMessageScheduler.scheduleAtFixedRate(new Runnable {
-              override def run(): Unit = Utils.tryLogNonFatalError {
-                self.send(ReregisterWithMaster)
-              }
-            }, PROLONGED_REGISTRATION_RETRY_INTERVAL_SECONDS,
+            forwardMessageScheduler.scheduleAtFixedRate(
+              () => Utils.tryLogNonFatalError { self.send(ReregisterWithMaster) },
+              PROLONGED_REGISTRATION_RETRY_INTERVAL_SECONDS,
               PROLONGED_REGISTRATION_RETRY_INTERVAL_SECONDS,
               TimeUnit.SECONDS))
         }
@@ -341,7 +339,7 @@ private[deploy] class Worker(
   }
 
   /**
-   * Cancel last registeration retry, or do nothing if no retry
+   * Cancel last registration retry, or do nothing if no retry
    */
   private def cancelLastRegistrationRetry(): Unit = {
     if (registerMasterFutures != null) {
@@ -361,11 +359,7 @@ private[deploy] class Worker(
         registerMasterFutures = tryRegisterAllMasters()
         connectionAttemptCount = 0
         registrationRetryTimer = Some(forwardMessageScheduler.scheduleAtFixedRate(
-          new Runnable {
-            override def run(): Unit = Utils.tryLogNonFatalError {
-              Option(self).foreach(_.send(ReregisterWithMaster))
-            }
-          },
+          () => Utils.tryLogNonFatalError { Option(self).foreach(_.send(ReregisterWithMaster)) },
           INITIAL_REGISTRATION_RETRY_INTERVAL_SECONDS,
           INITIAL_REGISTRATION_RETRY_INTERVAL_SECONDS,
           TimeUnit.SECONDS))
@@ -399,27 +393,32 @@ private[deploy] class Worker(
 
   private def handleRegisterResponse(msg: RegisterWorkerResponse): Unit = synchronized {
     msg match {
-      case RegisteredWorker(masterRef, masterWebUiUrl, masterAddress) =>
-        if (preferConfiguredMasterAddress) {
-          logInfo("Successfully registered with master " + masterAddress.toSparkURL)
+      case RegisteredWorker(masterRef, masterWebUiUrl, masterAddress, duplicate) =>
+        val preferredMasterAddress = if (preferConfiguredMasterAddress) {
+          masterAddress.toSparkURL
         } else {
-          logInfo("Successfully registered with master " + masterRef.address.toSparkURL)
+          masterRef.address.toSparkURL
         }
+
+        // there're corner cases which we could hardly avoid duplicate worker registration,
+        // e.g. Master disconnect(maybe due to network drop) and recover immediately, see
+        // SPARK-23191 for more details.
+        if (duplicate) {
+          logWarning(s"Duplicate registration at master $preferredMasterAddress")
+        }
+
+        logInfo(s"Successfully registered with master $preferredMasterAddress")
         registered = true
         changeMaster(masterRef, masterWebUiUrl, masterAddress)
-        forwardMessageScheduler.scheduleAtFixedRate(new Runnable {
-          override def run(): Unit = Utils.tryLogNonFatalError {
-            self.send(SendHeartbeat)
-          }
-        }, 0, HEARTBEAT_MILLIS, TimeUnit.MILLISECONDS)
+        forwardMessageScheduler.scheduleAtFixedRate(
+          () => Utils.tryLogNonFatalError { self.send(SendHeartbeat) },
+          0, HEARTBEAT_MILLIS, TimeUnit.MILLISECONDS)
         if (CLEANUP_ENABLED) {
           logInfo(
             s"Worker cleanup enabled; old application directories will be deleted in: $workDir")
-          forwardMessageScheduler.scheduleAtFixedRate(new Runnable {
-            override def run(): Unit = Utils.tryLogNonFatalError {
-              self.send(WorkDirCleanup)
-            }
-          }, CLEANUP_INTERVAL_MILLIS, CLEANUP_INTERVAL_MILLIS, TimeUnit.MILLISECONDS)
+          forwardMessageScheduler.scheduleAtFixedRate(
+            () => Utils.tryLogNonFatalError { self.send(WorkDirCleanup) },
+            CLEANUP_INTERVAL_MILLIS, CLEANUP_INTERVAL_MILLIS, TimeUnit.MILLISECONDS)
         }
 
         val execs = executors.values.map { e =>
@@ -550,12 +549,12 @@ private[deploy] class Worker(
             executorDir,
             workerUri,
             conf,
-            appLocalDirs, ExecutorState.RUNNING)
+            appLocalDirs,
+            ExecutorState.LAUNCHING)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
           memoryUsed += memory_
-          sendToMaster(ExecutorStateChanged(appId, execId, manager.state, None, None))
         } catch {
           case e: Exception =>
             logError(s"Failed to launch executor $appId/$execId for ${appDesc.name}.", e)
@@ -568,7 +567,7 @@ private[deploy] class Worker(
         }
       }
 
-    case executorStateChanged @ ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
+    case executorStateChanged: ExecutorStateChanged =>
       handleExecutorStateChanged(executorStateChanged)
 
     case KillExecutor(masterUrl, appId, execId) =>
@@ -632,7 +631,7 @@ private[deploy] class Worker(
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
     if (master.exists(_.address == remoteAddress) ||
-      masterAddressToConnect.exists(_ == remoteAddress)) {
+        masterAddressToConnect.contains(remoteAddress)) {
       logInfo(s"$remoteAddress Disassociated !")
       masterDisconnected()
     }
@@ -760,7 +759,8 @@ private[deploy] class Worker(
           trimFinishedExecutorsIfNecessary()
           coresUsed -= executor.cores
           memoryUsed -= executor.memory
-          if (CLEANUP_NON_SHUFFLE_FILES_ENABLED) {
+
+          if (CLEANUP_FILES_AFTER_EXECUTOR_EXIT) {
             shuffleService.executorRemoved(executorStateChanged.execId.toString, appId)
           }
         case None =>
@@ -815,7 +815,7 @@ private[deploy] object Worker extends Logging {
     val systemName = SYSTEM_NAME + workerNumber.map(_.toString).getOrElse("")
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create(systemName, host, port, conf, securityMgr)
-    val masterAddresses = masterUrls.map(RpcAddress.fromSparkURL(_))
+    val masterAddresses = masterUrls.map(RpcAddress.fromSparkURL)
     rpcEnv.setupEndpoint(ENDPOINT_NAME, new Worker(rpcEnv, webUiPort, cores, memory,
       masterAddresses, ENDPOINT_NAME, workDir, conf, securityMgr))
     rpcEnv

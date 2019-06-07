@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.io.File
+import java.io.{ByteArrayOutputStream, EOFException, File, FileOutputStream}
 import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.zip.GZIPOutputStream
 
 import scala.collection.JavaConverters._
 import scala.util.Properties
@@ -1171,6 +1172,40 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     }
   }
 
+  test("Enabling/disabling ignoreCorruptFiles") {
+    val inputFile = File.createTempFile("input-", ".gz")
+    try {
+      // Create a corrupt gzip file
+      val byteOutput = new ByteArrayOutputStream()
+      val gzip = new GZIPOutputStream(byteOutput)
+      try {
+        gzip.write(Array[Byte](1, 2, 3, 4))
+      } finally {
+        gzip.close()
+      }
+      val bytes = byteOutput.toByteArray
+      val o = new FileOutputStream(inputFile)
+      try {
+        // It's corrupt since we only write half of bytes into the file.
+        o.write(bytes.take(bytes.length / 2))
+      } finally {
+        o.close()
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+        val e = intercept[SparkException] {
+          spark.read.csv(inputFile.toURI.toString).collect()
+        }
+        assert(e.getCause.isInstanceOf[EOFException])
+        assert(e.getCause.getMessage === "Unexpected end of input stream")
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        assert(spark.read.csv(inputFile.toURI.toString).collect().isEmpty)
+      }
+    } finally {
+      inputFile.delete()
+    }
+  }
+
   test("SPARK-19610: Parse normal multi-line CSV files") {
     val primitiveFieldAndType = Seq(
       """"
@@ -2016,5 +2051,38 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       Row("bad record", null))
 
     checkAnswer(rows, expectedRows)
+  }
+
+  test("SPARK-27512: Decimal type inference should not handle ',' for backward compatibility") {
+    assert(spark.read
+      .option("delimiter", "|")
+      .option("inferSchema", "true")
+      .csv(Seq("1,2").toDS).schema.head.dataType === StringType)
+  }
+
+  test("SPARK-27873: disabling enforceSchema should not fail columnNameOfCorruptRecord") {
+    Seq("csv", "").foreach { reader =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> reader) {
+        withTempPath { path =>
+          val df = Seq(("0", "2013-111-11")).toDF("a", "b")
+          df.write
+            .option("header", "true")
+            .csv(path.getAbsolutePath)
+
+          val schema = StructType.fromDDL("a int, b date")
+          val columnNameOfCorruptRecord = "_unparsed"
+          val schemaWithCorrField = schema.add(columnNameOfCorruptRecord, StringType)
+          val readDF = spark
+            .read
+            .option("mode", "Permissive")
+            .option("header", "true")
+            .option("enforceSchema", false)
+            .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+            .schema(schemaWithCorrField)
+            .csv(path.getAbsoluteFile.toString)
+          checkAnswer(readDF, Row(0, null, "0,2013-111-11") :: Nil)
+        }
+      }
+    }
   }
 }

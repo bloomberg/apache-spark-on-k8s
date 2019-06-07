@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql
 
-import java.io.File
+import java.io.{File, PrintWriter}
+import java.net.URI
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
@@ -337,6 +338,26 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("auto gather stats after insert command") {
+    val table = "change_stats_insert_datasource_table"
+    Seq(false, true).foreach { autoUpdate =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+        withTable(table) {
+          sql(s"CREATE TABLE $table (i int, j string) USING PARQUET")
+          // insert into command
+          sql(s"INSERT INTO TABLE $table SELECT 1, 'abc'")
+          val stats = getCatalogTable(table).stats
+          if (autoUpdate) {
+            assert(stats.isDefined)
+            assert(stats.get.sizeInBytes >= 0)
+          } else {
+            assert(stats.isEmpty)
+          }
+        }
+      }
+    }
+  }
+
   test("invalidation of tableRelationCache after inserts") {
     val table = "invalidate_catalog_cache_table"
     Seq(false, true).foreach { autoUpdate =>
@@ -542,6 +563,91 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       assert(getStatAttrNames(s"$database.v") !== Set("c"))
       sql(s"ANALYZE TABLE $database.v COMPUTE STATISTICS FOR COLUMNS c")
       assert(getStatAttrNames(s"$database.v") === Set("c"))
+    }
+  }
+
+  test("analyzes table statistics in cached catalog view") {
+    def getTableStats(tableName: String): Statistics = {
+      spark.table(tableName).queryExecution.optimizedPlan.stats
+    }
+
+    withTempDatabase { database =>
+      sql(s"CREATE VIEW $database.v AS SELECT 1 c")
+      // Cache data eagerly by default, so this operation collects table stats
+      sql(s"CACHE TABLE $database.v")
+      val stats1 = getTableStats(s"$database.v")
+      assert(stats1.sizeInBytes > 0)
+      assert(stats1.rowCount === Some(1))
+      sql(s"UNCACHE TABLE $database.v")
+
+      // Cache data lazily, then analyze table stats
+      sql(s"CACHE LAZY TABLE $database.v")
+      val stats2 = getTableStats(s"$database.v")
+      assert(stats2.sizeInBytes === OneRowRelation().computeStats().sizeInBytes)
+      assert(stats2.rowCount === None)
+
+      sql(s"ANALYZE TABLE $database.v COMPUTE STATISTICS NOSCAN")
+      val stats3 = getTableStats(s"$database.v")
+      assert(stats3.sizeInBytes === OneRowRelation().computeStats().sizeInBytes)
+      assert(stats3.rowCount === None)
+
+      sql(s"ANALYZE TABLE $database.v COMPUTE STATISTICS")
+      val stats4 = getTableStats(s"$database.v")
+      assert(stats4.sizeInBytes === stats1.sizeInBytes)
+      assert(stats4.rowCount === Some(1))
+    }
+  }
+
+  test(s"CTAS should update statistics if ${SQLConf.AUTO_SIZE_UPDATE_ENABLED.key} is enabled") {
+    val tableName = "spark_27694"
+    Seq(false, true).foreach { updateEnabled =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> updateEnabled.toString) {
+        withTable(tableName) {
+          // Create a data source table using the result of a query.
+          sql(s"CREATE TABLE $tableName USING parquet AS SELECT 'a', 'b'")
+          val catalogTable = getCatalogTable(tableName)
+          if (updateEnabled) {
+            assert(catalogTable.stats.nonEmpty)
+          } else {
+            assert(catalogTable.stats.isEmpty)
+          }
+        }
+      }
+    }
+  }
+
+  test("Metadata files and temporary files should not be counted as data files") {
+    withTempDir { tempDir =>
+      val tableName = "t1"
+      val stagingDirName = ".test-staging-dir"
+      val tableLocation = s"${tempDir.toURI}/$tableName"
+      withSQLConf(
+        SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true",
+        "hive.exec.stagingdir" -> stagingDirName) {
+        withTable("t1") {
+          sql(s"CREATE TABLE $tableName(c1 BIGINT) USING PARQUET LOCATION '$tableLocation'")
+          sql(s"INSERT INTO TABLE $tableName VALUES(1)")
+
+          val staging = new File(new URI(s"$tableLocation/$stagingDirName"))
+          Utils.tryWithResource(new PrintWriter(staging)) { stagingWriter =>
+            stagingWriter.write("12")
+          }
+
+          val metadata = new File(new URI(s"$tableLocation/_metadata"))
+          Utils.tryWithResource(new PrintWriter(metadata)) { metadataWriter =>
+            metadataWriter.write("1234")
+          }
+
+          sql(s"INSERT INTO TABLE $tableName VALUES(1)")
+
+          val stagingFileSize = staging.length()
+          val metadataFileSize = metadata.length()
+          val tableLocationSize = getDataSize(new File(new URI(tableLocation)))
+
+          val stats = checkTableStats(tableName, hasSizeInBytes = true, expectedRowCounts = None)
+          assert(stats.get.sizeInBytes === tableLocationSize - stagingFileSize - metadataFileSize)
+        }
+      }
     }
   }
 }

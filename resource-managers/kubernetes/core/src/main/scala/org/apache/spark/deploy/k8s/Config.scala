@@ -125,6 +125,12 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_DRIVER_REQUEST_CORES =
+    ConfigBuilder("spark.kubernetes.driver.request.cores")
+      .doc("Specify the cpu request for the driver pod")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_DRIVER_SUBMIT_CHECK =
     ConfigBuilder("spark.kubernetes.submitInDriver")
     .internal()
@@ -324,6 +330,20 @@ private[spark] object Config extends Logging {
         "of failure or normal termination.")
       .booleanConf
       .createWithDefault(true)
+
+  val KUBERNETES_SUBMIT_GRACE_PERIOD =
+    ConfigBuilder("spark.kubernetes.appKillPodDeletionGracePeriod")
+      .doc("Time to wait for graceful deletion of Spark pods when spark-submit" +
+        " is used for killing an application.")
+      .timeConf(TimeUnit.SECONDS)
+      .createOptional
+
+  val KUBERNETES_FILE_UPLOAD_PATH =
+    ConfigBuilder("spark.kubernetes.file.upload.path")
+      .doc("Hadoop compatible file system path where files from the local file system " +
+        "will be uploded to in cluster mode.")
+      .stringConf
+      .createOptional
 
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."

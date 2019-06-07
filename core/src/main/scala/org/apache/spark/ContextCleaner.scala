@@ -126,9 +126,8 @@ private[spark] class ContextCleaner(
     cleaningThread.setDaemon(true)
     cleaningThread.setName("Spark Context Cleaner")
     cleaningThread.start()
-    periodicGCService.scheduleAtFixedRate(new Runnable {
-      override def run(): Unit = System.gc()
-    }, periodicGCInterval, periodicGCInterval, TimeUnit.SECONDS)
+    periodicGCService.scheduleAtFixedRate(() => System.gc(),
+      periodicGCInterval, periodicGCInterval, TimeUnit.SECONDS)
   }
 
   /**
