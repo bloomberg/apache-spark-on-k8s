@@ -180,6 +180,7 @@ object BlockStoreShuffleReaderBenchmark extends BenchmarkBase {
       null,
       null,
       null,
+      null,
       defaultConf
     ))
 

@@ -41,7 +41,7 @@ import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
-import org.apache.spark.shuffle.ShuffleManager
+import org.apache.spark.shuffle.{DefaultShuffleServiceAddressProvider, ShuffleManager, ShuffleServiceAddressProvider, ShuffleServiceAddressProviderFactory}
 import org.apache.spark.storage._
 import org.apache.spark.util.{RpcUtils, Utils}
 
@@ -67,6 +67,7 @@ class SparkEnv (
     val metricsSystem: MetricsSystem,
     val memoryManager: MemoryManager,
     val outputCommitCoordinator: OutputCommitCoordinator,
+    val shuffleServiceAddressProvider: ShuffleServiceAddressProvider,
     val conf: SparkConf) extends Logging {
 
   private[spark] var isStopped = false
@@ -90,6 +91,7 @@ class SparkEnv (
       blockManager.master.stop()
       metricsSystem.stop()
       outputCommitCoordinator.stop()
+      shuffleServiceAddressProvider.stop()
       rpcEnv.shutdown()
       rpcEnv.awaitTermination()
 
@@ -365,6 +367,20 @@ object SparkEnv extends Logging {
       new OutputCommitCoordinatorEndpoint(rpcEnv, outputCommitCoordinator))
     outputCommitCoordinator.coordinatorRef = Some(outputCommitCoordinatorRef)
 
+    // ShuffleServiceAddressProvider initialization
+    val master = conf.get("spark.master")
+    val shuffleProvider = conf.get(SHUFFLE_SERVICE_PROVIDER_CLASS)
+      .map(clazz => Utils.loadExtensions(classOf[ShuffleServiceAddressProviderFactory],
+        Seq(clazz), conf)).getOrElse(Seq())
+    val serviceLoaders = shuffleProvider.filter(_.canCreate(master))
+    if (serviceLoaders.size > 1) {
+      throw new SparkException(
+        s"Multiple external cluster managers registered for the url $master: $serviceLoaders")
+    }
+    val shuffleServiceAddressProvider = serviceLoaders.headOption
+      .map(_.create(conf))
+      .getOrElse(DefaultShuffleServiceAddressProvider)
+
     val envInstance = new SparkEnv(
       executorId,
       rpcEnv,
@@ -379,6 +395,7 @@ object SparkEnv extends Logging {
       metricsSystem,
       memoryManager,
       outputCommitCoordinator,
+      shuffleServiceAddressProvider,
       conf)
 
     // Add a reference to tmp dir created by driver, we will delete this tmp dir when stop() is
